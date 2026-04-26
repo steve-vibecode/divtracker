@@ -938,10 +938,22 @@ function downloadTemplate() {
   a.download = 'folio-template.csv'; a.click();
 }
 
+function excelDateToISO(val) {
+  // If it's already a date string, return as-is
+  if (typeof val === 'string' && val.includes('-')) return val.trim();
+  // Excel serial number: days since 1900-01-01 (with Lotus 1-2-3 bug offset)
+  const num = parseFloat(val);
+  if (!isNaN(num) && num > 1000) {
+    const date = new Date((num - 25569) * 86400 * 1000);
+    return date.toISOString().split('T')[0];
+  }
+  return String(val).trim();
+}
+
 function parseImportRow(row) {
   // row: [date, ticker, market, action, type, units, price, div_tax?]
-  const [date, ticker, market, action, type, units, price, divTax] = row;
-  const errors = [];
+  const [rawDate, ticker, market, action, type, units, price, divTax] = row;
+  const date = excelDateToISO(rawDate);
   if (!date) errors.push('missing date');
   if (!ticker) errors.push('missing ticker');
   const mkt = String(market||'').trim().toUpperCase();
@@ -967,7 +979,7 @@ function parseImportRow(row) {
       units: u,
       price: p,
       divTax: tax,
-      createdAt: new Date(String(date).trim()).getTime() || Date.now(),
+      createdAt: new Date(date).getTime() || Date.now(),
     }
   };
 }
@@ -996,7 +1008,7 @@ function handleImportFile(input) {
     } else {
       const wb = XLSX.read(e.target.result, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
     }
 
     // Skip header row if first cell looks like a label
