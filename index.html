@@ -372,9 +372,10 @@ nav {
 // ── CONFIG — paste your Worker URL here after deploying ──────────────────────
 const WORKER_URL = 'https://folio-price.stevetest181.workers.dev';
 
-// KLSE tickers need .KL suffix for Yahoo Finance
+// KLSE tickers need .KL suffix for Yahoo Finance (avoid double suffix)
 function toYahooSymbol(ticker, market) {
-  return market === 'MY' ? `${ticker}.KL` : ticker;
+  if (market !== 'MY') return ticker;
+  return ticker.toUpperCase().endsWith('.KL') ? ticker : `${ticker}.KL`;
 }
 
 // Price cache (5 min TTL)
