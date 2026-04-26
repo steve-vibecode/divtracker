@@ -38,8 +38,9 @@ body {
 }
 
 /* ── PAGES ── */
-.page { display: none; flex-direction: column; height: calc(100vh - var(--nav-h)); overflow-y: auto; padding: 16px 16px 24px; }
+.page { display: none; flex-direction: column; height: calc(100vh - var(--nav-h)); overflow-y: auto; padding: 10px 14px 24px; }
 .page.active { display: flex; }
+.page#page-dashboard { padding: 8px 14px 24px; }
 .page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 16px; }
 
 /* ── NAV ── */
@@ -97,7 +98,7 @@ nav {
 .hero-badge { font-size: 11px; color: #7a9adc; margin-left: auto; }
 
 /* ── ACC SECTION ── */
-.acc-section { margin-bottom: 10px; }
+.acc-section { margin-bottom: 8px; }
 .acc-head {
   background: var(--card); border: 1px solid var(--border);
   border-radius: var(--radius) var(--radius) 0 0;
@@ -237,7 +238,6 @@ nav {
 
 <!-- PAGES -->
 <div class="page active" id="page-dashboard">
-  <div class="page-title">Portfolio</div>
   <div id="dashboard-content">
     <div class="empty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18M9 17V9m4 8v-4m4 4V5"/></svg>
@@ -862,7 +862,7 @@ async function renderDashboard() {
     <div class="hero-label">Total Portfolio Value</div>
     <div class="hero-amount">${fmt(totalValRM,'MY')}</div>
     <div class="hero-row">
-      <span class="hero-gain ${cc(totalPLRM)}">${sgn(totalPLRM,'MY')}</span>
+      <span class="hero-gain ${cc(totalPLRM)}">${totalPLRM>=0?'+':'-'}RM${Math.abs(totalPLRM).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
       <span class="hero-gain ${cc(totalPLPct)}">${totalPLPct>=0?'+':''}${totalPLPct.toFixed(2)}%</span>
       <span class="hero-badge">USD→MYR: ${rate ? rate.toFixed(2) : '—'}</span>
     </div>
@@ -892,20 +892,20 @@ async function renderDashboard() {
 
     html += `<div class="acc-section">
       <div class="acc-head">
-        <div class="acc-head-row">
-          <div>
-            <div class="acc-type">Dividend Acc</div>
-            <div class="acc-val">RM${divCurVal.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-          </div>
-          <div class="acc-ann">
-            <div class="acc-ann-label">Est. Annual DV</div>
-            <div class="acc-ann-val">${divEstAnnual > 0 ? 'RM'+divEstAnnual.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</div>
-            <div class="acc-ann-pct">${divEstYieldPct > 0 ? divEstYieldPct.toFixed(2)+'%' : ''}</div>
-          </div>
+        <div class="acc-head-row" style="align-items:baseline;">
+          <div class="acc-type">Dividend Acc</div>
+          <div class="acc-ann-label">Est. Annual DV</div>
         </div>
-        <div class="acc-pl">
-          <span class="${cc(divPL)}">RM${divPL >= 0 ? '+' : '-'}${Math.abs(divPL).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-          <span class="${cc(divPLPct)}">${divPLPct>=0?'+':''}${divPLPct.toFixed(2)}%</span>
+        <div class="acc-head-row" style="align-items:baseline;margin-top:2px;">
+          <div class="acc-val">RM${divCurVal.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          <div class="acc-ann-val">RM${divEstAnnual > 0 ? divEstAnnual.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</div>
+        </div>
+        <div class="acc-head-row" style="align-items:baseline;margin-top:4px;">
+          <div class="acc-pl" style="margin-top:0;">
+            <span class="${cc(divPL)}">${divPL >= 0 ? '+' : '-'}RM${Math.abs(divPL).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+            <span class="${cc(divPLPct)}">${divPLPct>=0?'+':''}${divPLPct.toFixed(2)}%</span>
+          </div>
+          <div class="acc-ann-pct">${divEstYieldPct > 0 ? divEstYieldPct.toFixed(2)+'%' : ''}</div>
         </div>
       </div>
       <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>DV% / EST DV</span><span>LIVE / AVG</span></div>
@@ -922,14 +922,14 @@ async function renderDashboard() {
     const cur = grwStocks[0].market;
     html += `<div class="acc-section">
       <div class="acc-head">
-        <div class="acc-head-row">
-          <div>
-            <div class="acc-type">Growth Acc</div>
-            <div class="acc-val">${fmt(grwCurVal,cur)}</div>
-          </div>
+        <div class="acc-head-row" style="align-items:baseline;">
+          <div class="acc-type">Growth Acc</div>
         </div>
-        <div class="acc-pl">
-          <span class="${cc(grwPL)}">${sgn(grwPL,cur)}</span>
+        <div class="acc-head-row" style="align-items:baseline;margin-top:2px;">
+          <div class="acc-val">${fmt(grwCurVal,cur)}</div>
+        </div>
+        <div class="acc-pl" style="margin-top:4px;">
+          <span class="${cc(grwPL)}">${grwPL>=0?'+':'-'}${cur==='MY'?'RM':'$'}${Math.abs(grwPL).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
           <span class="${cc(grwPLPct)}">${grwPLPct>=0?'+':''}${grwPLPct.toFixed(2)}%</span>
         </div>
       </div>
