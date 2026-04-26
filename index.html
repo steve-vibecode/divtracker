@@ -684,23 +684,29 @@ async function renderDashboard() {
 
   function calcStock(h) {
     const yahooSym   = toYahooSymbol(h.ticker, h.market);
-    const livePrice  = hasPrices && prices[yahooSym]?.price ? prices[yahooSym].price : null;
+    const quote      = hasPrices ? prices[yahooSym] : null;
+    const livePrice  = quote?.price  ?? null;
+    const divYield   = quote?.divYield ?? null;  // TTM yield e.g. 0.065
+    const divRate    = quote?.divRate  ?? null;  // TTM div per share
     const avgCost    = h.units ? h.costBasis / h.units : 0;
     const curVal     = livePrice ? livePrice * h.units : null;
     const unrealised = curVal !== null ? curVal - h.costBasis : null;
     const realised   = realisedGain[h.ticker] || 0;
     const pl         = unrealised !== null ? unrealised + realised : null;
     const plPct      = pl !== null && h.costBasis ? (pl / h.costBasis * 100) : null;
-    return { livePrice, avgCost, curVal, unrealised, realised, pl, plPct };
+    // Est annual DV = divRate per share × units held (more accurate than yield × value)
+    const estAnnualDV = divRate !== null ? divRate * h.units : (divYield !== null && curVal !== null ? divYield * curVal : null);
+    return { livePrice, avgCost, curVal, unrealised, realised, pl, plPct, divYield, estAnnualDV };
   }
 
   function buildDivRows(stocks) {
     return stocks.map(h => {
-      const { livePrice, avgCost, curVal, unrealised, realised, pl, plPct } = calcStock(h);
-      const dvRecv   = divMap[h.ticker] || 0;
-      const capGain  = unrealised;                                          // price movement only
-      const totalPL  = capGain !== null ? capGain + realised + dvRecv : null; // unrealised + realised + dividends
+      const { livePrice, avgCost, curVal, unrealised, realised, pl, plPct, divYield, estAnnualDV } = calcStock(h);
+      const dvRecv     = divMap[h.ticker] || 0;
+      const capGain    = unrealised;
+      const totalPL    = capGain !== null ? capGain + realised + dvRecv : null;
       const totalPLPct = totalPL !== null && h.costBasis ? (totalPL / h.costBasis * 100) : null;
+      const dvYieldPct = divYield !== null ? (divYield * 100).toFixed(2) + '%' : '—';
       const cur = h.market;
       return `
       <div class="stock-row row-div">
@@ -720,8 +726,8 @@ async function renderDashboard() {
           <div class="cell-sub ${dvRecv > 0 ? 'pos' : 'dim'}">${dvRecv > 0 ? '+'+fmt(dvRecv, cur) : 'no div yet'}</div>
         </div>
         <div>
-          <div class="cell-main ora">${livePrice ? fmt(livePrice, cur) : '—'}</div>
-          <div class="cell-sub dim">${fmt(avgCost, cur)} cost</div>
+          <div class="cell-main ora">${dvYieldPct}</div>
+          <div class="cell-sub dim">${estAnnualDV !== null ? fmt(estAnnualDV, cur) : '—'}</div>
         </div>
       </div>`;
     }).join('');
@@ -797,7 +803,9 @@ async function renderDashboard() {
     const divCostVal = divStocks.reduce((s,h)=>s+h.costBasis,0);
     const divPL      = divStocks.reduce((s,h)=>{ const {unrealised,realised}=calcStock(h); const dv=divMap[h.ticker]||0; return s+((unrealised??0)+realised+dv); },0);
     const divPLPct   = divCostVal ? (divPL/divCostVal*100) : 0;
-    const divTotalDV = divStocks.reduce((s,h)=>s+(divMap[h.ticker]||0),0);
+    const divTotalDV    = divStocks.reduce((s,h)=>s+(divMap[h.ticker]||0),0);
+    const divEstAnnual  = divStocks.reduce((s,h)=>{ const {estAnnualDV}=calcStock(h); return s+(estAnnualDV??0); },0);
+    const divEstYieldPct = divCurVal ? (divEstAnnual/divCurVal*100) : 0;
     const cur = divStocks[0].market;
     html += `<div class="acc-section">
       <div class="acc-head">
@@ -808,7 +816,8 @@ async function renderDashboard() {
           </div>
           <div class="acc-ann">
             <div class="acc-ann-label">Est. Annual DV</div>
-            <div class="acc-ann-val">${divTotalDV>0 ? '+'+fmt(divTotalDV,cur) : '—'}</div>
+            <div class="acc-ann-val">${divEstAnnual > 0 ? fmt(divEstAnnual,cur) : '—'}</div>
+            <div class="acc-ann-pct">${divEstYieldPct > 0 ? divEstYieldPct.toFixed(2)+'%' : ''}</div>
           </div>
         </div>
         <div class="acc-pl">
@@ -816,7 +825,7 @@ async function renderDashboard() {
           <span class="${cc(divPLPct)}">${divPLPct>=0?'+':''}${divPLPct.toFixed(2)}%</span>
         </div>
       </div>
-      <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>PRICE / AVG</span></div>
+      <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>DV% / EST DV</span></div>
       ${buildDivRows(divStocks)}
     </div>`;
   }
