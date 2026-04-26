@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="theme-color" content="#0a0f1e"/>
+<title>Folio</title>
+<style>
+:root {
+  --bg: #0a0f1e;
+  --surface: #131929;
+  --card: #1a2235;
+  --border: #1e2d45;
+  --accent: #3b82f6;
+  --accent2: #10b981;
+  --red: #ef4444;
+  --orange: #f59e0b;
+  --text: #f0f4ff;
+  --text2: #7a8aaa;
+  --text3: #4a5a7a;
+  --green: #10b981;
+  --radius: 14px;
+  --nav-h: 64px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* ── PAGES ── */
+.page { display: none; flex-direction: column; height: calc(100vh - var(--nav-h)); overflow-y: auto; padding: 16px 16px 24px; }
+.page.active { display: flex; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 16px; }
+
+/* ── NAV ── */
+nav {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 480px;
+  height: var(--nav-h);
+  background: rgba(13,20,40,0.95);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center;
+  z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.nav-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  gap: 4px; cursor: pointer; padding: 8px 0;
+  color: var(--text3); transition: color 0.2s;
+}
+.nav-btn.active { color: var(--accent); }
+.nav-btn svg { width: 22px; height: 22px; }
+.nav-btn span { font-size: 10px; font-weight: 500; letter-spacing: 0.3px; }
+
+/* ── CARDS ── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.card-label { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px; }
+.card-value { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+.card-sub { font-size: 12px; color: var(--text2); margin-top: 3px; }
+
+/* ── SUMMARY HERO ── */
+.hero {
+  background: linear-gradient(135deg, #0f1f45 0%, #1a2f60 100%);
+  border: 1px solid #1e3a7a;
+  border-radius: var(--radius);
+  padding: 18px 18px 16px;
+  margin-bottom: 10px;
+  position: relative; overflow: hidden;
+}
+.hero::before {
+  content: ''; position: absolute; top: -40px; right: -40px;
+  width: 150px; height: 150px;
+  background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%);
+  border-radius: 50%;
+}
+.hero-label { font-size: 10px; color: #7a9adc; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+.hero-amount { font-size: 30px; font-weight: 800; letter-spacing: -1px; }
+.hero-row { display: flex; gap: 10px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+.hero-gain { font-size: 13px; font-weight: 600; }
+.hero-badge { font-size: 11px; color: #7a9adc; margin-left: auto; }
+
+/* ── ACC SECTION ── */
+.acc-section { margin-bottom: 10px; }
+.acc-head {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.acc-head-row { display: flex; justify-content: space-between; align-items: baseline; }
+.acc-type { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+.acc-val { font-size: 19px; font-weight: 700; }
+.acc-pl { font-size: 13px; font-weight: 600; margin-top: 4px; }
+.acc-ann { text-align: right; }
+.acc-ann-label { font-size: 10px; color: var(--text2); }
+.acc-ann-val { font-size: 19px; font-weight: 700; color: var(--orange); }
+.acc-ann-pct { font-size: 13px; color: var(--orange); margin-top: 2px; }
+
+.col-head {
+  background: #111827; display: grid; column-gap: 6px;
+  padding: 5px 16px; font-size: 9px; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600;
+  border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+  text-align: center;
+}
+.col-head span:first-child { text-align: left; padding-left: 38px; }
+.col-div  { grid-template-columns: 1.7fr 1.1fr 1.2fr 1fr; }
+.col-grow { grid-template-columns: 1.7fr 1.1fr 1.2fr 1fr; }
+
+.stock-row {
+  background: var(--card); display: grid; column-gap: 6px;
+  padding: 9px 16px; border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+  align-items: center;
+}
+.stock-row:last-child { border-radius: 0 0 var(--radius) var(--radius); }
+.row-div  { grid-template-columns: 1.7fr 1.1fr 1.2fr 1fr; }
+.row-grow { grid-template-columns: 1.7fr 1.1fr 1.2fr 1fr; }
+
+.stock-row > div { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.stock-row > div:first-child { flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; min-width: 0; }
+.ticker-wrap > div { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; overflow: hidden; }
+
+.ticker-badge {
+  width: 34px; height: 24px; border-radius: 6px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 6px; font-weight: 800; margin-right: 7px;
+  letter-spacing: -0.2px; text-align: center; line-height: 1.1;
+  overflow: hidden;
+}
+.s-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.s-units { font-size: 9px; color: var(--text2); margin-top: 1px; }
+.cell-main { font-size: 11px; font-weight: 600; }
+.cell-sub  { font-size: 9px; color: var(--text2); margin-top: 2px; }
+.cell-pct  { font-size: 9px; font-weight: 600; margin-top: 2px; }
+
+/* ── FORMS ── */
+.form-section { margin-bottom: 20px; }
+.form-title { font-size: 13px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+.form-group { margin-bottom: 12px; }
+.form-label { font-size: 12px; color: var(--text2); margin-bottom: 5px; display: block; }
+.form-input, .form-select {
+  width: 100%; background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 11px 14px; color: var(--text);
+  font-size: 15px; outline: none; -webkit-appearance: none;
+  transition: border-color 0.2s;
+}
+.form-input:focus, .form-select:focus { border-color: var(--accent); }
+.form-input::placeholder { color: var(--text3); }
+.form-select option { background: var(--card); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+.btn {
+  width: 100%; padding: 14px; border-radius: 12px; border: none;
+  font-size: 15px; font-weight: 700; cursor: pointer; letter-spacing: 0.2px;
+  transition: opacity 0.2s, transform 0.1s;
+}
+.btn:active { transform: scale(0.98); opacity: 0.85; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-success { background: var(--green); color: white; }
+.btn-danger  { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 8px; font-size: 12px; border-radius: 8px; width: auto; }
+
+/* ── LOG LIST ── */
+.log-list { margin-top: 16px; }
+.log-item {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.log-left { display: flex; flex-direction: column; gap: 3px; }
+.log-ticker { font-size: 14px; font-weight: 700; }
+.log-detail { font-size: 11px; color: var(--text2); }
+.log-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.log-amount { font-size: 13px; font-weight: 600; }
+.tag {
+  font-size: 9px; font-weight: 700; padding: 2px 8px;
+  border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.tag-buy  { background: rgba(16,185,129,0.15); color: var(--green); }
+.tag-sell { background: rgba(239,68,68,0.15);  color: var(--red); }
+.tag-div  { background: rgba(245,158,11,0.15); color: var(--orange); }
+.tag-my   { background: rgba(59,130,246,0.12); color: #7ab4ff; }
+.tag-us   { background: rgba(99,102,241,0.12); color: #a5b4fc; }
+
+/* ── EMPTY STATE ── */
+.empty { text-align: center; padding: 40px 20px; color: var(--text3); }
+.empty svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.3; }
+.empty p { font-size: 14px; }
+
+/* ── COLORS ── */
+.pos   { color: var(--green); }
+.neg   { color: var(--red); }
+.neu   { color: var(--text); }
+.ora   { color: var(--orange); }
+.dim   { color: var(--text2); }
+
+/* ── SEGMENT ── */
+.segment { display: flex; background: var(--surface); border-radius: 10px; padding: 3px; margin-bottom: 16px; }
+.seg-btn { flex: 1; padding: 8px; border-radius: 8px; border: none; background: none; color: var(--text2); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.seg-btn.active { background: var(--card); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { display: none; }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed; bottom: calc(var(--nav-h) + 12px); left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--green); color: white;
+  padding: 10px 20px; border-radius: 20px; font-size: 13px; font-weight: 600;
+  opacity: 0; transition: all 0.3s; z-index: 999; white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.error { background: var(--red); }
+</style>
+</head>
+<body>
+
+<!-- PAGES -->
+<div class="page active" id="page-dashboard">
+  <div class="page-title">Portfolio</div>
+  <div id="dashboard-content">
+    <div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18M9 17V9m4 8v-4m4 4V5"/></svg>
+      <p>No transactions yet.<br>Add stocks in the Transactions tab.</p>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="page-transactions">
+  <div class="page-title">Transactions</div>
+  <div class="segment">
+    <button class="seg-btn active" onclick="switchSeg('txn','add')">Add</button>
+    <button class="seg-btn" onclick="switchSeg('txn','log')">History</button>
+  </div>
+  <div id="txn-add">
+    <div class="form-section">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Ticker</label>
+          <input class="form-input" id="txn-ticker" placeholder="e.g. AAPL" style="text-transform:uppercase"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Market</label>
+          <select class="form-select" id="txn-market">
+            <option value="US">🇺🇸 US (USD)</option>
+            <option value="MY">🇲🇾 MY (MYR)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Action</label>
+          <select class="form-select" id="txn-action">
+            <option value="buy">Buy</option>
+            <option value="sell">Sell</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Type</label>
+          <select class="form-select" id="txn-type">
+            <option value="growth">Growth</option>
+            <option value="dividend">Dividend</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Units</label>
+          <input class="form-input" id="txn-units" type="number" placeholder="0" min="0" step="any"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Price per unit</label>
+          <input class="form-input" id="txn-price" type="number" placeholder="0.00" min="0" step="any"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Date</label>
+        <input class="form-input" id="txn-date" type="date"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes (optional)</label>
+        <input class="form-input" id="txn-notes" placeholder="e.g. DCA, rebalancing..."/>
+      </div>
+      <button class="btn btn-primary" onclick="addTransaction()">Add Transaction</button>
+    </div>
+  </div>
+  <div id="txn-log" style="display:none;">
+    <div id="txn-list"></div>
+  </div>
+</div>
+
+<div class="page" id="page-dividends">
+  <div class="page-title">Dividends</div>
+  <div class="segment">
+    <button class="seg-btn active" onclick="switchSeg('div','add')">Add</button>
+    <button class="seg-btn" onclick="switchSeg('div','log')">History</button>
+  </div>
+  <div id="div-add">
+    <div class="form-section">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Ticker</label>
+          <input class="form-input" id="div-ticker" placeholder="e.g. 5176" style="text-transform:uppercase"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Market</label>
+          <select class="form-select" id="div-market">
+            <option value="US">🇺🇸 US (USD)</option>
+            <option value="MY">🇲🇾 MY (MYR)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Amount received</label>
+          <input class="form-input" id="div-amount" type="number" placeholder="0.00" min="0" step="any"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          <input class="form-input" id="div-date" type="date"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes (optional)</label>
+        <input class="form-input" id="div-notes" placeholder="e.g. Q1 dividend..."/>
+      </div>
+      <button class="btn btn-success" onclick="addDividend()">Log Dividend</button>
+    </div>
+  </div>
+  <div id="div-log" style="display:none;">
+    <div id="div-list"></div>
+  </div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav>
+  <div class="nav-btn active" id="nav-dashboard" onclick="goPage('dashboard')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M9 17V9m4 8v-4m4 4V5"/></svg>
+    <span>Dashboard</span>
+  </div>
+  <div class="nav-btn" id="nav-transactions" onclick="goPage('transactions')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m-4-4 4 4 4-4M8 8l4-4 4 4"/></svg>
+    <span>Transactions</span>
+  </div>
+  <div class="nav-btn" id="nav-dividends" onclick="goPage('dividends')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+    <span>Dividends</span>
+  </div>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG — paste your Worker URL here after deploying ──────────────────────
+const WORKER_URL = 'https://folio-price.stevetest181.workers.dev';
+
+// KLSE tickers need .KL suffix for Yahoo Finance
+function toYahooSymbol(ticker, market) {
+  return market === 'MY' ? `${ticker}.KL` : ticker;
+}
+
+// Price cache (5 min TTL)
+let priceCache = {};
+let priceCacheTime = 0;
+
+async function fetchLivePrices(holdings) {
+  const now = Date.now();
+  if (now - priceCacheTime < 5 * 60 * 1000 && Object.keys(priceCache).length) {
+    return priceCache;
+  }
+  const symbols = holdings.map(h => toYahooSymbol(h.ticker, h.market));
+  if (!symbols.length) return {};
+  try {
+    const resp = await fetch(`${WORKER_URL}/price?symbols=${symbols.join(',')}`);
+    if (!resp.ok) throw new Error('Worker error ' + resp.status);
+    const data = await resp.json();
+    priceCache = data;
+    priceCacheTime = now;
+    return data;
+  } catch (e) {
+    console.warn('Price fetch failed:', e.message);
+    return {};
+  }
+}
+
+// ── DB ────────────────────────────────────────────────────────────────────────
+let db;
+const DB_NAME = 'folio', DB_VER = 1;
+
+function openDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('transactions')) {
+        const s = d.createObjectStore('transactions', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('ticker', 'ticker');
+        s.createIndex('type', 'type');
+      }
+      if (!d.objectStoreNames.contains('dividends')) {
+        const s = d.createObjectStore('dividends', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('ticker', 'ticker');
+      }
+    };
+    req.onsuccess = e => { db = e.target.result; res(db); };
+    req.onerror   = e => rej(e);
+  });
+}
+
+function dbAdd(store, data) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).add(data);
+    req.onsuccess = () => res(req.result);
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+function dbGetAll(store) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = () => res(req.result);
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+function dbDelete(store, id) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).delete(id);
+    req.onsuccess = () => res();
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+function goPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+  if (name === 'dashboard') renderDashboard();
+  if (name === 'transactions') renderTxnLog();
+  if (name === 'dividends') renderDivLog();
+}
+
+function switchSeg(page, tab) {
+  if (page === 'txn') {
+    document.getElementById('txn-add').style.display = tab === 'add' ? 'block' : 'none';
+    document.getElementById('txn-log').style.display = tab === 'log' ? 'block' : 'none';
+    if (tab === 'log') renderTxnLog();
+  } else {
+    document.getElementById('div-add').style.display = tab === 'add' ? 'block' : 'none';
+    document.getElementById('div-log').style.display = tab === 'log' ? 'block' : 'none';
+    if (tab === 'log') renderDivLog();
+  }
+  // update segment buttons
+  const btns = document.querySelectorAll(`#page-${page === 'txn' ? 'transactions' : 'dividends'} .seg-btn`);
+  btns.forEach((b, i) => b.classList.toggle('active', (tab === 'add' && i === 0) || (tab === 'log' && i === 1)));
+}
+
+// ── TOAST ────────────────────────────────────────────────────────────────────
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isError ? ' error' : '') + ' show';
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function fmt(n, currency, decimals = 2) {
+  const sym = currency === 'MY' ? 'RM' : '$';
+  return sym + Math.abs(n).toLocaleString('en', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+function sgn(n, currency) { return (n >= 0 ? '+' : '-') + fmt(n, currency); }
+function pct(n) { return (n >= 0 ? '+' : '') + n.toFixed(2) + '%'; }
+function cc(n)  { return n >= 0 ? 'pos' : 'neg'; }
+
+function badgeColor(ticker) {
+  const colors = [
+    ['#1a3a6b','#7ab4ff'], ['#1a4a2a','#6ee7b7'], ['#4a1a1a','#fca5a5'],
+    ['#2a1a4a','#c4b5fd'], ['#4a3a1a','#fcd34d'], ['#1a3a4a','#7dd3fc'],
+    ['#3a1a4a','#f0abfc'], ['#1a4a4a','#5eead4'],
+  ];
+  let h = 0; for (let c of ticker) h = (h * 31 + c.charCodeAt(0)) % colors.length;
+  return colors[Math.abs(h)];
+}
+
+function tickerBadge(ticker) {
+  const [bg, fg] = badgeColor(ticker);
+  const fs = ticker.length <= 3 ? '8px' : ticker.length === 4 ? '7px' : '5.5px';
+  return `<div class="ticker-badge" style="background:${bg};color:${fg};font-size:${fs};">${ticker}</div>`;
+}
+
+function today() { return new Date().toISOString().split('T')[0]; }
+
+// ── TRANSACTIONS ──────────────────────────────────────────────────────────────
+async function addTransaction() {
+  const ticker = document.getElementById('txn-ticker').value.trim().toUpperCase();
+  const market = document.getElementById('txn-market').value;
+  const action = document.getElementById('txn-action').value;
+  const type   = document.getElementById('txn-type').value;
+  const units  = parseFloat(document.getElementById('txn-units').value);
+  const price  = parseFloat(document.getElementById('txn-price').value);
+  const date   = document.getElementById('txn-date').value || today();
+  const notes  = document.getElementById('txn-notes').value.trim();
+
+  if (!ticker || isNaN(units) || units <= 0 || isNaN(price) || price <= 0) {
+    showToast('Please fill in all required fields', true); return;
+  }
+
+  await dbAdd('transactions', { ticker, market, action, type, units, price, date, notes, createdAt: Date.now() });
+  showToast(`${action === 'buy' ? 'Bought' : 'Sold'} ${ticker} logged!`);
+
+  // reset form
+  document.getElementById('txn-ticker').value = '';
+  document.getElementById('txn-units').value  = '';
+  document.getElementById('txn-price').value  = '';
+  document.getElementById('txn-notes').value  = '';
+  document.getElementById('txn-date').value   = today();
+}
+
+async function renderTxnLog() {
+  const all = await dbGetAll('transactions');
+  const el  = document.getElementById('txn-list');
+  if (!all.length) {
+    el.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg><p>No transactions yet.</p></div>`;
+    return;
+  }
+  all.sort((a, b) => b.createdAt - a.createdAt);
+  el.innerHTML = all.map(t => `
+    <div class="log-item">
+      <div class="log-left">
+        <div class="log-ticker">${t.ticker} <span class="tag tag-${t.action}">${t.action}</span> <span class="tag tag-${t.market.toLowerCase()}">${t.market}</span></div>
+        <div class="log-detail">${t.date} · ${t.units} units @ ${fmt(t.price, t.market)}</div>
+        ${t.notes ? `<div class="log-detail" style="color:var(--text3);">${t.notes}</div>` : ''}
+      </div>
+      <div class="log-right">
+        <div class="log-amount ${t.action === 'buy' ? 'neg' : 'pos'}">${t.action === 'buy' ? '-' : '+'}${fmt(t.units * t.price, t.market)}</div>
+        <div class="tag" style="background:rgba(99,102,241,0.12);color:#a5b4fc;">${t.type}</div>
+        <button class="btn btn-danger" onclick="deleteTxn(${t.id})">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+async function deleteTxn(id) {
+  await dbDelete('transactions', id);
+  renderTxnLog();
+  showToast('Transaction deleted');
+}
+
+// ── DIVIDENDS ─────────────────────────────────────────────────────────────────
+async function addDividend() {
+  const ticker = document.getElementById('div-ticker').value.trim().toUpperCase();
+  const market = document.getElementById('div-market').value;
+  const amount = parseFloat(document.getElementById('div-amount').value);
+  const date   = document.getElementById('div-date').value || today();
+  const notes  = document.getElementById('div-notes').value.trim();
+
+  if (!ticker || isNaN(amount) || amount <= 0) {
+    showToast('Please fill in all required fields', true); return;
+  }
+
+  await dbAdd('dividends', { ticker, market, amount, date, notes, createdAt: Date.now() });
+  showToast(`Dividend for ${ticker} logged!`);
+
+  document.getElementById('div-ticker').value = '';
+  document.getElementById('div-amount').value = '';
+  document.getElementById('div-notes').value  = '';
+  document.getElementById('div-date').value   = today();
+}
+
+async function renderDivLog() {
+  const all = await dbGetAll('dividends');
+  const el  = document.getElementById('div-list');
+  if (!all.length) {
+    el.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><p>No dividends logged yet.</p></div>`;
+    return;
+  }
+  all.sort((a, b) => b.createdAt - a.createdAt);
+  el.innerHTML = all.map(d => `
+    <div class="log-item">
+      <div class="log-left">
+        <div class="log-ticker">${d.ticker} <span class="tag tag-div">Dividend</span> <span class="tag tag-${d.market.toLowerCase()}">${d.market}</span></div>
+        <div class="log-detail">${d.date}</div>
+        ${d.notes ? `<div class="log-detail" style="color:var(--text3);">${d.notes}</div>` : ''}
+      </div>
+      <div class="log-right">
+        <div class="log-amount pos">+${fmt(d.amount, d.market)}</div>
+        <button class="btn btn-danger" onclick="deleteDiv(${d.id})">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+async function deleteDiv(id) {
+  await dbDelete('dividends', id);
+  renderDivLog();
+  showToast('Dividend deleted');
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+async function renderDashboard() {
+  const el = document.getElementById('dashboard-content');
+  const [txns, divs] = await Promise.all([dbGetAll('transactions'), dbGetAll('dividends')]);
+
+  if (!txns.length) {
+    el.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18M9 17V9m4 8v-4m4 4V5"/></svg><p>No transactions yet.<br>Add stocks in the Transactions tab.</p></div>`;
+    return;
+  }
+
+  // Build holdings
+  const holdings = {};
+  for (const t of txns) {
+    if (!holdings[t.ticker]) holdings[t.ticker] = { ticker: t.ticker, market: t.market, type: t.type, units: 0, costBasis: 0 };
+    const h = holdings[t.ticker];
+    if (t.action === 'buy') {
+      h.costBasis += t.units * t.price;
+      h.units     += t.units;
+    } else {
+      const avg    = h.units ? h.costBasis / h.units : 0;
+      h.costBasis -= avg * t.units;
+      h.units     -= t.units;
+    }
+  }
+
+  const divMap = {};
+  for (const d of divs) divMap[d.ticker] = (divMap[d.ticker] || 0) + d.amount;
+
+  const active = Object.values(holdings).filter(h => h.units > 0.00001);
+  if (!active.length) { el.innerHTML = `<div class="empty"><p>All positions closed.</p></div>`; return; }
+
+  // Show skeleton while fetching prices
+  el.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text2);font-size:13px;">
+    <div class="spinner" style="margin:0 auto 12px;border-top-color:var(--accent);"></div>Fetching live prices...</div>`;
+
+  // Fetch live prices
+  const prices = await fetchLivePrices(active);
+  const hasPrices = Object.keys(prices).length > 0 && !prices.error;
+
+  const divStocks = active.filter(h => h.type === 'dividend');
+  const grwStocks = active.filter(h => h.type === 'growth');
+
+  function calcStock(h) {
+    const yahooSym = toYahooSymbol(h.ticker, h.market);
+    const livePrice = hasPrices && prices[yahooSym]?.price ? prices[yahooSym].price : null;
+    const avgCost   = h.units ? h.costBasis / h.units : 0;
+    const curVal    = livePrice ? livePrice * h.units : null;
+    const pl        = curVal !== null ? curVal - h.costBasis : null;
+    const plPct     = pl !== null && h.costBasis ? (pl / h.costBasis * 100) : null;
+    return { livePrice, avgCost, curVal, pl, plPct };
+  }
+
+  function buildDivRows(stocks) {
+    return stocks.map(h => {
+      const { livePrice, avgCost, curVal, pl, plPct } = calcStock(h);
+      const dvRecv = divMap[h.ticker] || 0;
+      const capGain = pl !== null ? pl - dvRecv : null;
+      const cur = h.market;
+      return `
+      <div class="stock-row row-div">
+        <div class="ticker-wrap">
+          ${tickerBadge(h.ticker)}
+          <div>
+            <div class="s-name">${h.ticker}</div>
+            <div class="s-units">${h.units.toLocaleString('en',{maximumFractionDigits:4})} shares</div>
+          </div>
+        </div>
+        <div>
+          <div class="cell-main ${pl !== null ? cc(pl) : 'dim'}">${pl !== null ? sgn(pl, cur) : '—'}</div>
+          <div class="cell-pct ${plPct !== null ? cc(plPct) : 'dim'}">${plPct !== null ? pct(plPct) : 'no price'}</div>
+        </div>
+        <div>
+          <div class="cell-main ${capGain !== null ? cc(capGain) : 'dim'}">${capGain !== null ? sgn(capGain, cur) : '—'}</div>
+          <div class="cell-sub ${dvRecv > 0 ? 'pos' : 'dim'}">${dvRecv > 0 ? '+'+fmt(dvRecv, cur) : 'no div yet'}</div>
+        </div>
+        <div>
+          <div class="cell-main ora">${livePrice ? fmt(livePrice, cur) : '—'}</div>
+          <div class="cell-sub dim">${fmt(avgCost, cur)} cost</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function buildGrwRows(stocks) {
+    return stocks.map(h => {
+      const { livePrice, avgCost, curVal, pl, plPct } = calcStock(h);
+      const cur = h.market;
+      return `
+      <div class="stock-row row-grow">
+        <div class="ticker-wrap">
+          ${tickerBadge(h.ticker)}
+          <div>
+            <div class="s-name">${h.ticker}</div>
+            <div class="s-units">${h.units.toLocaleString('en',{maximumFractionDigits:6})} shares</div>
+          </div>
+        </div>
+        <div>
+          <div class="cell-main ${pl !== null ? cc(pl) : 'dim'}">${pl !== null ? sgn(pl, cur) : '—'}</div>
+          <div class="cell-pct ${plPct !== null ? cc(plPct) : 'dim'}">${plPct !== null ? pct(plPct) : 'no price'}</div>
+        </div>
+        <div>
+          <div class="cell-main dim">${livePrice ? fmt(livePrice, cur) : '—'}</div>
+          <div class="cell-sub dim">${fmt(avgCost, cur)} avg</div>
+        </div>
+        <div>
+          <div class="cell-main ${curVal !== null ? 'neu' : 'dim'}">${curVal !== null ? fmt(curVal, cur, 0) : '—'}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Totals
+  const myVal = active.filter(h=>h.market==='MY').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal||h.costBasis); },0);
+  const usVal = active.filter(h=>h.market==='US').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal||h.costBasis); },0);
+  const myPL  = active.filter(h=>h.market==='MY').reduce((s,h)=>{ const {pl}=calcStock(h); return s+(pl||0); },0);
+  const usPL  = active.filter(h=>h.market==='US').reduce((s,h)=>{ const {pl}=calcStock(h); return s+(pl||0); },0);
+
+  const now = new Date().toLocaleString('en-MY',{dateStyle:'medium',timeStyle:'short'});
+  let html = '';
+
+  // Hero
+  html += `<div class="hero">
+    <div class="hero-label">Portfolio Value</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:4px;">
+      ${myVal > 0 ? `<div><div style="font-size:10px;color:#7a9adc;margin-bottom:2px;">MYR</div><div class="hero-amount">${fmt(myVal,'MY',0)}</div><div style="font-size:12px;margin-top:3px;" class="${cc(myPL)}">${sgn(myPL,'MY')}</div></div>` : ''}
+      ${usVal > 0 ? `<div><div style="font-size:10px;color:#7a9adc;margin-bottom:2px;">USD</div><div class="hero-amount">${fmt(usVal,'US',0)}</div><div style="font-size:12px;margin-top:3px;" class="${cc(usPL)}">${sgn(usPL,'US')}</div></div>` : ''}
+    </div>
+    <div class="hero-row" style="margin-top:8px;">
+      <span style="font-size:10px;color:#7a9adc;">Updated: ${now}</span>
+      <button onclick="renderDashboard()" style="margin-left:auto;background:rgba(59,130,246,0.2);border:none;color:#7ab4ff;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;">↻ Refresh</button>
+    </div>
+  </div>`;
+
+  if (!hasPrices) {
+    html += `<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:12px;color:var(--orange);">
+      ⚠️ Live prices unavailable. Deploy the Cloudflare Worker and update WORKER_URL in the code.
+    </div>`;
+  }
+
+  // Dividend section
+  if (divStocks.length) {
+    const divTotal = divStocks.reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal||h.costBasis); },0);
+    const divTotalDV = divStocks.reduce((s,h)=>s+(divMap[h.ticker]||0),0);
+    const cur = divStocks[0].market;
+    html += `<div class="acc-section">
+      <div class="acc-head">
+        <div class="acc-head-row">
+          <div><div class="acc-type">Dividend Portfolio</div><div class="acc-val">${fmt(divTotal,cur,0)}</div></div>
+          <div class="acc-ann"><div class="acc-ann-label">Total DV Received</div><div class="acc-ann-val" style="font-size:15px;">${divTotalDV > 0 ? '+'+fmt(divTotalDV,cur) : '—'}</div></div>
+        </div>
+      </div>
+      <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>PRICE / AVG</span></div>
+      ${buildDivRows(divStocks)}
+    </div>`;
+  }
+
+  // Growth section
+  if (grwStocks.length) {
+    const grwTotal = grwStocks.reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal||h.costBasis); },0);
+    const cur = grwStocks[0].market;
+    html += `<div class="acc-section">
+      <div class="acc-head">
+        <div class="acc-head-row">
+          <div><div class="acc-type">Growth Portfolio</div><div class="acc-val">${fmt(grwTotal,cur,0)}</div></div>
+        </div>
+      </div>
+      <div class="col-head col-grow"><span>STOCKS</span><span>P/L (%)</span><span>LIVE / AVG</span><span>VALUE</span></div>
+      ${buildGrwRows(grwStocks)}
+    </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+openDB().then(() => {
+  // Set default dates
+  document.getElementById('txn-date').value = today();
+  document.getElementById('div-date').value = today();
+  renderDashboard();
+});
+</script>
+</body>
+</html>
