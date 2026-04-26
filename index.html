@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="theme-color" content="#0a0f1e"/>
-<title>Folio</title>
+<title>Stocks Portfolio</title>
 <style>
 :root {
   --bg: #0a0f1e;
@@ -121,7 +121,7 @@ nav {
   text-align: center;
 }
 .col-head span:first-child { text-align: left; padding-left: 38px; }
-.col-div  { grid-template-columns: 1.7fr 1.1fr 1.2fr 1fr; }
+.col-div  { grid-template-columns: 1.5fr 1fr 1fr 0.85fr 0.85fr; }
 .col-grow { grid-template-columns: 1.7fr 1.1fr 1.2fr 1fr; }
 
 .stock-row {
@@ -131,7 +131,7 @@ nav {
   align-items: center;
 }
 .stock-row:last-child { border-radius: 0 0 var(--radius) var(--radius); }
-.row-div  { grid-template-columns: 1.7fr 1.1fr 1.2fr 1fr; }
+.row-div  { grid-template-columns: 1.5fr 1fr 1fr 0.85fr 0.85fr; }
 .row-grow { grid-template-columns: 1.7fr 1.1fr 1.2fr 1fr; }
 
 .stock-row > div { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
@@ -799,6 +799,10 @@ async function renderDashboard() {
           <div class="cell-main ora">${dvYieldPct}</div>
           <div class="cell-sub dim">${estAnnualDV !== null ? fmt(estAnnualDV, cur) : '—'}</div>
         </div>
+        <div>
+          <div class="cell-main neu">${livePrice ? fmt(livePrice, cur) : '—'}</div>
+          <div class="cell-sub dim">${fmt(avgCost, cur)} avg</div>
+        </div>
       </div>`;
     }).join('');
   }
@@ -833,13 +837,20 @@ async function renderDashboard() {
 
   // Totals — convert everything to MYR using live rate
   const rate = cachedRate || 0;
+  const toRM = (val, market) => market === 'US' ? (val ?? 0) * rate : (val ?? 0);
+
   const myVal  = active.filter(h=>h.market==='MY').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal??h.costBasis); },0);
   const usVal  = active.filter(h=>h.market==='US').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal??h.costBasis); },0);
-  const myPL   = active.filter(h=>h.market==='MY').reduce((s,h)=>{ const {pl}=calcStock(h); return s+(pl??0); },0);
-  const usPL   = active.filter(h=>h.market==='US').reduce((s,h)=>{ const {pl}=calcStock(h); return s+(pl??0); },0);
+
+  // P/L = unrealised + realised + dividends received (all converted to RM)
+  const totalPLRM = active.reduce((s,h)=>{
+    const {unrealised, realised} = calcStock(h);
+    const dv = divMap[h.ticker] || 0;
+    return s + toRM((unrealised??0) + realised + dv, h.market);
+  }, 0);
+
   const totalValRM = myVal + (usVal * rate);
-  const totalPLRM  = myPL  + (usPL  * rate);
-  const totalCost  = active.reduce((s,h) => s + (h.market==='MY' ? h.costBasis : h.costBasis*rate), 0);
+  const totalCost  = active.reduce((s,h) => s + toRM(h.costBasis, h.market), 0);
   const totalPLPct = totalCost ? (totalPLRM / totalCost * 100) : 0;
 
   const now = new Date().toLocaleString('en-MY',{dateStyle:'medium',timeStyle:'short'});
@@ -897,7 +908,7 @@ async function renderDashboard() {
           <span class="${cc(divPLPct)}">${divPLPct>=0?'+':''}${divPLPct.toFixed(2)}%</span>
         </div>
       </div>
-      <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>DV% / EST DV</span></div>
+      <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>DV% / EST DV</span><span>LIVE / AVG</span></div>
       ${buildDivRows(divStocks)}
     </div>`;
   }
