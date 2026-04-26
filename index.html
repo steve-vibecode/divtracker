@@ -628,8 +628,10 @@ async function renderDashboard() {
     return;
   }
 
-  // Build holdings
+  // Build holdings + track realised gains
   const holdings = {};
+  const realisedGain = {}; // realised gain per ticker from sells
+
   for (const t of txns) {
     if (!holdings[t.ticker]) holdings[t.ticker] = { ticker: t.ticker, market: t.market, type: t.type, units: 0, costBasis: 0 };
     const h = holdings[t.ticker];
@@ -637,9 +639,11 @@ async function renderDashboard() {
       h.costBasis += t.units * t.price;
       h.units     += t.units;
     } else {
-      const avg    = h.units ? h.costBasis / h.units : 0;
-      h.costBasis -= avg * t.units;
-      h.units     -= t.units;
+      const avg     = h.units ? h.costBasis / h.units : 0;
+      const realised = (t.price - avg) * t.units; // gain/loss on this sell
+      realisedGain[t.ticker] = (realisedGain[t.ticker] || 0) + realised;
+      h.costBasis  -= avg * t.units;
+      h.units      -= t.units;
     }
   }
 
@@ -661,21 +665,23 @@ async function renderDashboard() {
   const grwStocks = active.filter(h => h.type === 'growth');
 
   function calcStock(h) {
-    const yahooSym = toYahooSymbol(h.ticker, h.market);
-    const livePrice = hasPrices && prices[yahooSym]?.price ? prices[yahooSym].price : null;
-    const avgCost   = h.units ? h.costBasis / h.units : 0;
-    const curVal    = livePrice ? livePrice * h.units : null;
-    const pl        = curVal !== null ? curVal - h.costBasis : null;
-    const plPct     = pl !== null && h.costBasis ? (pl / h.costBasis * 100) : null;
-    return { livePrice, avgCost, curVal, pl, plPct };
+    const yahooSym   = toYahooSymbol(h.ticker, h.market);
+    const livePrice  = hasPrices && prices[yahooSym]?.price ? prices[yahooSym].price : null;
+    const avgCost    = h.units ? h.costBasis / h.units : 0;
+    const curVal     = livePrice ? livePrice * h.units : null;
+    const unrealised = curVal !== null ? curVal - h.costBasis : null;
+    const realised   = realisedGain[h.ticker] || 0;
+    const pl         = unrealised !== null ? unrealised + realised : null;
+    const plPct      = pl !== null && h.costBasis ? (pl / h.costBasis * 100) : null;
+    return { livePrice, avgCost, curVal, unrealised, realised, pl, plPct };
   }
 
   function buildDivRows(stocks) {
     return stocks.map(h => {
-      const { livePrice, avgCost, curVal, pl, plPct } = calcStock(h);
-      const dvRecv  = divMap[h.ticker] || 0;
-      const capGain = curVal !== null ? curVal - h.costBasis : null;  // (live price - avg cost) × units
-      const totalPL = capGain !== null ? capGain + dvRecv : null;     // cap gain + dividends
+      const { livePrice, avgCost, curVal, unrealised, realised, pl, plPct } = calcStock(h);
+      const dvRecv   = divMap[h.ticker] || 0;
+      const capGain  = unrealised;                                          // price movement only
+      const totalPL  = capGain !== null ? capGain + realised + dvRecv : null; // unrealised + realised + dividends
       const totalPLPct = totalPL !== null && h.costBasis ? (totalPL / h.costBasis * 100) : null;
       const cur = h.market;
       return `
@@ -705,7 +711,7 @@ async function renderDashboard() {
 
   function buildGrwRows(stocks) {
     return stocks.map(h => {
-      const { livePrice, avgCost, curVal, pl, plPct } = calcStock(h);
+      const { livePrice, avgCost, curVal, unrealised, realised, pl, plPct } = calcStock(h);
       const cur = h.market;
       return `
       <div class="stock-row row-grow">
@@ -718,7 +724,7 @@ async function renderDashboard() {
         </div>
         <div>
           <div class="cell-main ${pl !== null ? cc(pl) : 'dim'}">${pl !== null ? sgn(pl, cur) : '—'}</div>
-          <div class="cell-pct ${plPct !== null ? cc(plPct) : 'dim'}">${plPct !== null ? pct(plPct) : 'no price'}</div>
+          <div class="cell-pct ${plPct !== null ? cc(plPct) : 'dim'}">${plPct !== null ? pct(plPct) : 'no price'}${realised !== 0 ? ` <span style="color:var(--text2);font-size:8px;">(R:${sgn(realised,cur)})</span>` : ''}</div>
         </div>
         <div>
           <div class="cell-main dim">${livePrice ? fmt(livePrice, cur) : '—'}</div>
