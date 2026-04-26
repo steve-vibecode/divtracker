@@ -773,8 +773,8 @@ async function renderDashboard() {
     return stocks.map(h => {
       const { livePrice, avgCost, curVal, unrealised, realised, pl, plPct, divYield, estAnnualDV } = calcStock(h);
       const dvRecv     = divMap[h.ticker] || 0;
-      const capGain    = unrealised;
-      const totalPL    = capGain !== null ? capGain + realised + dvRecv : null;
+      const capGain    = unrealised;                                              // price movement only (live val - cost basis)
+      const totalPL    = unrealised !== null ? unrealised + realised + dvRecv : null; // full return
       const totalPLPct = totalPL !== null && h.costBasis ? (totalPL / h.costBasis * 100) : null;
       const dvYieldPct = divYield !== null ? (divYield * 100).toFixed(2) + '%' : '—';
       const cur = h.market;
@@ -869,29 +869,31 @@ async function renderDashboard() {
 
   // Dividend section
   if (divStocks.length) {
-    const divCurVal  = divStocks.reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal??h.costBasis); },0);
-    const divCostVal = divStocks.reduce((s,h)=>s+h.costBasis,0);
-    const divPL      = divStocks.reduce((s,h)=>{ const {unrealised,realised}=calcStock(h); const dv=divMap[h.ticker]||0; return s+((unrealised??0)+realised+dv); },0);
+    // Convert everything to MYR using live rate
+    const toRM = (val, market) => market === 'US' ? (val ?? 0) * rate : (val ?? 0);
+
+    const divCurVal  = divStocks.reduce((s,h)=>{ const {curVal}=calcStock(h); return s + toRM(curVal ?? h.costBasis, h.market); },0);
+    const divCostVal = divStocks.reduce((s,h)=> s + toRM(h.costBasis, h.market), 0);
+    const divPL      = divStocks.reduce((s,h)=>{ const {unrealised,realised}=calcStock(h); const dv=toRM(divMap[h.ticker]||0, h.market); return s + toRM((unrealised??0)+realised, h.market) + dv; },0);
     const divPLPct   = divCostVal ? (divPL/divCostVal*100) : 0;
-    const divTotalDV    = divStocks.reduce((s,h)=>s+(divMap[h.ticker]||0),0);
-    const divEstAnnual  = divStocks.reduce((s,h)=>{ const {estAnnualDV}=calcStock(h); return s+(estAnnualDV??0); },0);
+    const divEstAnnual = divStocks.reduce((s,h)=>{ const {estAnnualDV}=calcStock(h); return s + toRM(estAnnualDV??0, h.market); },0);
     const divEstYieldPct = divCurVal ? (divEstAnnual/divCurVal*100) : 0;
-    const cur = divStocks[0].market;
+
     html += `<div class="acc-section">
       <div class="acc-head">
         <div class="acc-head-row">
           <div>
             <div class="acc-type">Dividend Acc</div>
-            <div class="acc-val">${fmt(divCurVal,cur)}</div>
+            <div class="acc-val">RM${divCurVal.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
           </div>
           <div class="acc-ann">
             <div class="acc-ann-label">Est. Annual DV</div>
-            <div class="acc-ann-val">${divEstAnnual > 0 ? fmt(divEstAnnual,cur) : '—'}</div>
+            <div class="acc-ann-val">${divEstAnnual > 0 ? 'RM'+divEstAnnual.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</div>
             <div class="acc-ann-pct">${divEstYieldPct > 0 ? divEstYieldPct.toFixed(2)+'%' : ''}</div>
           </div>
         </div>
         <div class="acc-pl">
-          <span class="${cc(divPL)}">${sgn(divPL,cur)}</span>
+          <span class="${cc(divPL)}">RM${divPL >= 0 ? '+' : '-'}${Math.abs(divPL).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
           <span class="${cc(divPLPct)}">${divPLPct>=0?'+':''}${divPLPct.toFixed(2)}%</span>
         </div>
       </div>
