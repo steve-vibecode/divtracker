@@ -276,7 +276,7 @@ nav {
         </div>
         <div class="form-group">
           <label class="form-label">Type</label>
-          <select class="form-select" id="txn-type">
+          <select class="form-select" id="txn-type" onchange="toggleDivTax()">
             <option value="growth">Growth</option>
             <option value="dividend">Dividend</option>
           </select>
@@ -291,6 +291,11 @@ nav {
           <label class="form-label">Price per unit</label>
           <input class="form-input" id="txn-price" type="number" placeholder="0.00" min="0" step="any"/>
         </div>
+      </div>
+      <div class="form-group" id="txn-tax-group" style="display:none;">
+        <label class="form-label">Dividend Withholding Tax (%)</label>
+        <input class="form-input" id="txn-tax" type="number" placeholder="e.g. 30 for US stocks" min="0" max="100" step="any"/>
+        <div style="font-size:11px;color:var(--text2);margin-top:5px;">💡 Typically 30% for US stocks held by Malaysians, 0% for MY stocks</div>
       </div>
       <div class="form-group">
         <label class="form-label">Date</label>
@@ -521,6 +526,11 @@ function tickerBadge(ticker) {
 function today() { return new Date().toISOString().split('T')[0]; }
 
 // ── TRANSACTIONS ──────────────────────────────────────────────────────────────
+function toggleDivTax() {
+  const type = document.getElementById('txn-type').value;
+  document.getElementById('txn-tax-group').style.display = type === 'dividend' ? 'block' : 'none';
+}
+
 async function addTransaction() {
   const ticker = document.getElementById('txn-ticker').value.trim().toUpperCase();
   const market = document.getElementById('txn-market').value;
@@ -530,6 +540,7 @@ async function addTransaction() {
   const price  = parseFloat(document.getElementById('txn-price').value);
   const date   = document.getElementById('txn-date').value || today();
   const notes  = document.getElementById('txn-notes').value.trim();
+  const divTax = type === 'dividend' ? (parseFloat(document.getElementById('txn-tax').value) || 0) : 0;
 
   if (!ticker || isNaN(units) || units <= 0 || isNaN(price) || price <= 0) {
     showToast('Please fill in all required fields', true); return;
@@ -547,7 +558,7 @@ async function addTransaction() {
     }
   }
 
-  await dbAdd('transactions', { ticker, market, action, type, units, price, date, notes, createdAt: Date.now() });
+  await dbAdd('transactions', { ticker, market, action, type, units, price, date, notes, divTax, createdAt: Date.now() });
   showToast(`${action === 'buy' ? 'Bought' : 'Sold'} ${ticker} logged!`);
 
   // reset form
@@ -555,7 +566,9 @@ async function addTransaction() {
   document.getElementById('txn-units').value  = '';
   document.getElementById('txn-price').value  = '';
   document.getElementById('txn-notes').value  = '';
+  document.getElementById('txn-tax').value    = '';
   document.getElementById('txn-date').value   = today();
+  toggleDivTax();
 }
 
 async function renderTxnLog() {
@@ -668,6 +681,14 @@ async function renderDashboard() {
   const divMap = {};
   for (const d of divs) divMap[d.ticker] = (divMap[d.ticker] || 0) + d.amount;
 
+  // Get div tax per ticker from most recent buy transaction
+  const divTaxMap = {};
+  for (const t of txns) {
+    if (t.type === 'dividend' && t.divTax != null) {
+      divTaxMap[t.ticker] = t.divTax; // last written wins (all buys should be same)
+    }
+  }
+
   const active = Object.values(holdings).filter(h => h.units > 0.00001);
   if (!active.length) { el.innerHTML = `<div class="empty"><p>All positions closed.</p></div>`; return; }
 
@@ -694,9 +715,12 @@ async function renderDashboard() {
     const realised   = realisedGain[h.ticker] || 0;
     const pl         = unrealised !== null ? unrealised + realised : null;
     const plPct      = pl !== null && h.costBasis ? (pl / h.costBasis * 100) : null;
-    // Est annual DV = divRate per share × units held (more accurate than yield × value)
-    const estAnnualDV = divRate !== null ? divRate * h.units : (divYield !== null && curVal !== null ? divYield * curVal : null);
-    return { livePrice, avgCost, curVal, unrealised, realised, pl, plPct, divYield, estAnnualDV };
+    // Est annual DV = divRate per share × units held, after withholding tax
+    const taxRate     = (divTaxMap[h.ticker] || 0) / 100;
+    const rawEstDV    = divRate !== null ? divRate * h.units : (divYield !== null && curVal !== null ? divYield * curVal : null);
+    const estAnnualDV = rawEstDV !== null ? rawEstDV * (1 - taxRate) : null;
+    const netDivYield = divYield !== null ? divYield * (1 - taxRate) : null;
+    return { livePrice, avgCost, curVal, unrealised, realised, pl, plPct, divYield: netDivYield, estAnnualDV };
   }
 
   function buildDivRows(stocks) {
@@ -873,7 +897,11 @@ openDB().then(() => {
     if (prev) {
       document.getElementById('txn-market').value = prev.market;
       document.getElementById('txn-type').value   = prev.type;
-      showToast(`${ticker}: auto-set to ${prev.type} / ${prev.market}`);
+      toggleDivTax();
+      if (prev.type === 'dividend' && prev.divTax != null) {
+        document.getElementById('txn-tax').value = prev.divTax;
+      }
+      showToast(`${ticker}: auto-set to ${prev.type} / ${prev.market}${prev.divTax ? `, ${prev.divTax}% tax` : ''}`);
     }
   });
 });
