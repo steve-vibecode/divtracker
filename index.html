@@ -773,8 +773,8 @@ async function renderDashboard() {
     return stocks.map(h => {
       const { livePrice, avgCost, curVal, unrealised, realised, pl, plPct, divYield, estAnnualDV } = calcStock(h);
       const dvRecv     = divMap[h.ticker] || 0;
-      const capGain    = unrealised;                                              // price movement only (live val - cost basis)
-      const totalPL    = unrealised !== null ? unrealised + realised + dvRecv : null; // full return
+      const capGain    = unrealised !== null ? unrealised + realised : null; // unrealised + realised from sells
+      const totalPL    = capGain !== null ? capGain + dvRecv : null;
       const totalPLPct = totalPL !== null && h.costBasis ? (totalPL / h.costBasis * 100) : null;
       const dvYieldPct = divYield !== null ? (divYield * 100).toFixed(2) + '%' : '—';
       const cur = h.market;
