@@ -231,6 +231,7 @@ nav {
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.error { background: var(--red); }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -250,6 +251,7 @@ nav {
   <div class="segment">
     <button class="seg-btn active" onclick="switchSeg('txn','add')">Add</button>
     <button class="seg-btn" onclick="switchSeg('txn','log')">History</button>
+    <button class="seg-btn" onclick="switchSeg('txn','import')">Import</button>
   </div>
   <div id="txn-add">
     <div class="form-section">
@@ -310,6 +312,48 @@ nav {
   </div>
   <div id="txn-log" style="display:none;">
     <div id="txn-list"></div>
+  </div>
+  <div id="txn-import" style="display:none;">
+    <div class="form-section">
+      <div class="form-title">Import from CSV / Excel</div>
+
+      <!-- Format guide -->
+      <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8;">
+        <div style="font-weight:700;color:var(--accent);margin-bottom:6px;">Required column order:</div>
+        <div style="font-family:monospace;font-size:11px;color:var(--text);">date | ticker | market | action | type | units | price | div_tax</div>
+        <div style="margin-top:8px;font-size:11px;">
+          • <b>date</b>: YYYY-MM-DD<br>
+          • <b>market</b>: US or MY<br>
+          • <b>action</b>: buy or sell<br>
+          • <b>type</b>: growth or dividend<br>
+          • <b>div_tax</b>: 0–100 (optional, for dividend stocks only)
+        </div>
+      </div>
+
+      <!-- Download template -->
+      <button class="btn" onclick="downloadTemplate()" style="background:rgba(59,130,246,0.15);color:var(--accent);border:1px solid rgba(59,130,246,0.3);margin-bottom:12px;">
+        ↓ Download CSV Template
+      </button>
+
+      <!-- File upload -->
+      <div id="import-drop-zone" onclick="document.getElementById('import-file').click()"
+        style="border:2px dashed var(--border);border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:border-color 0.2s;margin-bottom:12px;">
+        <div style="font-size:28px;margin-bottom:8px;">📂</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text);">Tap to select file</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px;">Supports .csv and .xlsx</div>
+      </div>
+      <input type="file" id="import-file" accept=".csv,.xlsx" style="display:none;" onchange="handleImportFile(this)"/>
+
+      <!-- Preview -->
+      <div id="import-preview" style="display:none;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text);">Preview</div>
+        <div id="import-preview-list"></div>
+        <div style="display:flex;gap:10px;margin-top:12px;">
+          <button class="btn btn-primary" onclick="confirmImport()" id="import-confirm-btn">Import All</button>
+          <button class="btn" onclick="cancelImport()" style="background:rgba(239,68,68,0.1);color:var(--red);border:1px solid rgba(239,68,68,0.2);">Cancel</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -477,17 +521,19 @@ function goPage(name) {
 
 function switchSeg(page, tab) {
   if (page === 'txn') {
-    document.getElementById('txn-add').style.display = tab === 'add' ? 'block' : 'none';
-    document.getElementById('txn-log').style.display = tab === 'log' ? 'block' : 'none';
+    document.getElementById('txn-add').style.display    = tab === 'add'    ? 'block' : 'none';
+    document.getElementById('txn-log').style.display    = tab === 'log'    ? 'block' : 'none';
+    document.getElementById('txn-import').style.display = tab === 'import' ? 'block' : 'none';
     if (tab === 'log') renderTxnLog();
   } else {
     document.getElementById('div-add').style.display = tab === 'add' ? 'block' : 'none';
     document.getElementById('div-log').style.display = tab === 'log' ? 'block' : 'none';
     if (tab === 'log') renderDivLog();
   }
-  // update segment buttons
-  const btns = document.querySelectorAll(`#page-${page === 'txn' ? 'transactions' : 'dividends'} .seg-btn`);
-  btns.forEach((b, i) => b.classList.toggle('active', (tab === 'add' && i === 0) || (tab === 'log' && i === 1)));
+  const pageId = page === 'txn' ? 'transactions' : 'dividends';
+  const btns = document.querySelectorAll(`#page-${pageId} .seg-btn`);
+  const tabs = page === 'txn' ? ['add','log','import'] : ['add','log'];
+  btns.forEach((b, i) => b.classList.toggle('active', tabs[i] === tab));
 }
 
 // ── TOAST ────────────────────────────────────────────────────────────────────
@@ -880,6 +926,148 @@ async function renderDashboard() {
   }
 
   el.innerHTML = html;
+}
+
+// ── IMPORT ────────────────────────────────────────────────────────────────────
+let importRows = [];
+
+function downloadTemplate() {
+  const csv = `date,ticker,market,action,type,units,price,div_tax\n2024-01-15,AAPL,US,buy,growth,10,180.00,\n2024-01-15,JEPQ,US,buy,dividend,100,45.00,30\n2024-02-01,1155,MY,buy,dividend,200,9.50,0\n`;
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'folio-template.csv'; a.click();
+}
+
+function parseImportRow(row) {
+  // row: [date, ticker, market, action, type, units, price, div_tax?]
+  const [date, ticker, market, action, type, units, price, divTax] = row;
+  const errors = [];
+  if (!date) errors.push('missing date');
+  if (!ticker) errors.push('missing ticker');
+  const mkt = String(market||'').trim().toUpperCase();
+  if (!['US','MY'].includes(mkt)) errors.push(`market must be US or MY`);
+  const act = String(action||'').trim().toLowerCase();
+  if (!['buy','sell'].includes(act)) errors.push(`action must be buy or sell`);
+  const typ = String(type||'').trim().toLowerCase();
+  if (!['growth','dividend'].includes(typ)) errors.push(`type must be growth or dividend`);
+  const u = parseFloat(units);
+  if (isNaN(u) || u <= 0) errors.push('invalid units');
+  const p = parseFloat(price);
+  if (isNaN(p) || p <= 0) errors.push('invalid price');
+  const tax = parseFloat(divTax) || 0;
+  return {
+    valid: errors.length === 0,
+    errors,
+    data: {
+      date: String(date).trim(),
+      ticker: String(ticker).trim().toUpperCase(),
+      market: mkt,
+      action: act,
+      type: typ,
+      units: u,
+      price: p,
+      divTax: tax,
+      createdAt: new Date(String(date).trim()).getTime() || Date.now(),
+    }
+  };
+}
+
+function handleImportFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const isCsv = file.name.endsWith('.csv');
+  const reader = new FileReader();
+
+  reader.onload = (e) => {
+    let rows = [];
+    if (isCsv) {
+      const text = e.target.result;
+      rows = text.trim().split('\n').map(line => {
+        // handle quoted fields
+        const cells = []; let cur = ''; let inQ = false;
+        for (let ch of line) {
+          if (ch === '"') { inQ = !inQ; }
+          else if (ch === ',' && !inQ) { cells.push(cur.trim()); cur = ''; }
+          else cur += ch;
+        }
+        cells.push(cur.trim());
+        return cells;
+      });
+    } else {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    }
+
+    // Skip header row if first cell looks like a label
+    if (rows.length && isNaN(rows[0][0]) && String(rows[0][0]).toLowerCase().includes('date')) {
+      rows = rows.slice(1);
+    }
+    rows = rows.filter(r => r.some(c => c !== '' && c !== null && c !== undefined));
+
+    importRows = rows.map((r, i) => ({ rowNum: i + 2, ...parseImportRow(r) }));
+    renderImportPreview();
+  };
+
+  if (isCsv) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+}
+
+function renderImportPreview() {
+  const preview = document.getElementById('import-preview');
+  const list    = document.getElementById('import-preview-list');
+  const validCount = importRows.filter(r => r.valid).length;
+  const errCount   = importRows.filter(r => !r.valid).length;
+
+  preview.style.display = 'block';
+  document.getElementById('import-confirm-btn').textContent = `Import ${validCount} rows`;
+
+  list.innerHTML = importRows.map(r => `
+    <div style="background:${r.valid ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)'};border:1px solid ${r.valid ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'};border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:11px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-weight:700;color:var(--text);">Row ${r.rowNum}: ${r.data?.ticker || '?'}</span>
+        <span style="color:${r.valid ? 'var(--green)' : 'var(--red)'};">${r.valid ? '✓ Valid' : '✗ Error'}</span>
+      </div>
+      ${r.valid
+        ? `<div style="color:var(--text2);margin-top:2px;">${r.data.date} · ${r.data.action} ${r.data.units} @ ${r.data.market==='MY'?'RM':'$'}${r.data.price} · ${r.data.type}${r.data.divTax ? ` · ${r.data.divTax}% tax` : ''}</div>`
+        : `<div style="color:var(--red);margin-top:2px;">${r.errors.join(', ')}</div>`
+      }
+    </div>`).join('');
+
+  if (errCount > 0) {
+    list.innerHTML += `<div style="font-size:11px;color:var(--text2);margin-top:4px;">⚠️ ${errCount} row(s) with errors will be skipped.</div>`;
+  }
+}
+
+async function confirmImport() {
+  const valid = importRows.filter(r => r.valid).map(r => r.data);
+  if (!valid.length) { showToast('No valid rows to import', true); return; }
+
+  // Type/market conflict check
+  const existing = await dbGetAll('transactions');
+  const conflicts = [];
+  for (const row of valid) {
+    const prev = existing.find(t => t.ticker === row.ticker);
+    if (prev && (prev.type !== row.type || prev.market !== row.market)) {
+      conflicts.push(`${row.ticker} (existing: ${prev.type}/${prev.market}, import: ${row.type}/${row.market})`);
+    }
+  }
+  if (conflicts.length) {
+    showToast(`Conflict: ${conflicts.join('; ')}`, true); return;
+  }
+
+  for (const row of valid) await dbAdd('transactions', row);
+  showToast(`✓ Imported ${valid.length} transactions!`);
+  importRows = [];
+  document.getElementById('import-preview').style.display = 'none';
+  document.getElementById('import-file').value = '';
+  switchSeg('txn', 'log');
+}
+
+function cancelImport() {
+  importRows = [];
+  document.getElementById('import-preview').style.display = 'none';
+  document.getElementById('import-file').value = '';
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
