@@ -673,8 +673,10 @@ async function renderDashboard() {
   function buildDivRows(stocks) {
     return stocks.map(h => {
       const { livePrice, avgCost, curVal, pl, plPct } = calcStock(h);
-      const dvRecv = divMap[h.ticker] || 0;
-      const capGain = pl !== null ? pl - dvRecv : null;
+      const dvRecv  = divMap[h.ticker] || 0;
+      const capGain = curVal !== null ? curVal - h.costBasis : null;  // (live price - avg cost) × units
+      const totalPL = capGain !== null ? capGain + dvRecv : null;     // cap gain + dividends
+      const totalPLPct = totalPL !== null && h.costBasis ? (totalPL / h.costBasis * 100) : null;
       const cur = h.market;
       return `
       <div class="stock-row row-div">
@@ -686,8 +688,8 @@ async function renderDashboard() {
           </div>
         </div>
         <div>
-          <div class="cell-main ${pl !== null ? cc(pl) : 'dim'}">${pl !== null ? sgn(pl, cur) : '—'}</div>
-          <div class="cell-pct ${plPct !== null ? cc(plPct) : 'dim'}">${plPct !== null ? pct(plPct) : 'no price'}</div>
+          <div class="cell-main ${totalPL !== null ? cc(totalPL) : 'dim'}">${totalPL !== null ? sgn(totalPL, cur) : '—'}</div>
+          <div class="cell-pct ${totalPLPct !== null ? cc(totalPLPct) : 'dim'}">${totalPLPct !== null ? pct(totalPLPct) : 'no price'}</div>
         </div>
         <div>
           <div class="cell-main ${capGain !== null ? cc(capGain) : 'dim'}">${capGain !== null ? sgn(capGain, cur) : '—'}</div>
