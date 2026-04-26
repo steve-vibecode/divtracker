@@ -106,10 +106,11 @@ nav {
 .acc-head-row { display: flex; justify-content: space-between; align-items: baseline; }
 .acc-type { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
 .acc-val { font-size: 19px; font-weight: 700; }
-.acc-pl { font-size: 13px; font-weight: 600; margin-top: 4px; }
+.acc-pl { display: flex; gap: 8px; align-items: baseline; margin-top: 5px; }
+.acc-pl span { font-size: 13px; font-weight: 600; }
 .acc-ann { text-align: right; }
 .acc-ann-label { font-size: 10px; color: var(--text2); }
-.acc-ann-val { font-size: 19px; font-weight: 700; color: var(--orange); }
+.acc-ann-val { font-size: 15px; font-weight: 700; color: var(--orange); }
 .acc-ann-pct { font-size: 13px; color: var(--orange); margin-top: 2px; }
 
 .col-head {
@@ -378,9 +379,10 @@ function toYahooSymbol(ticker, market) {
   return ticker.toUpperCase().endsWith('.KL') ? ticker : `${ticker}.KL`;
 }
 
-// Price cache (5 min TTL)
+// Price + rate cache (5 min TTL)
 let priceCache = {};
 let priceCacheTime = 0;
+let cachedRate = null;
 
 async function fetchLivePrices(holdings) {
   const now = Date.now();
@@ -390,9 +392,13 @@ async function fetchLivePrices(holdings) {
   const symbols = holdings.map(h => toYahooSymbol(h.ticker, h.market));
   if (!symbols.length) return {};
   try {
-    const resp = await fetch(`${WORKER_URL}/price?symbols=${symbols.join(',')}`);
-    if (!resp.ok) throw new Error('Worker error ' + resp.status);
-    const data = await resp.json();
+    const [priceResp, rateResp] = await Promise.all([
+      fetch(`${WORKER_URL}/price?symbols=${symbols.join(',')}`),
+      fetch(`${WORKER_URL}/rate`)
+    ]);
+    const data = await priceResp.json();
+    const rateData = await rateResp.json();
+    cachedRate = rateData.rate || null;
     priceCache = data;
     priceCacheTime = now;
     return data;
@@ -749,25 +755,33 @@ async function renderDashboard() {
     }).join('');
   }
 
-  // Totals
-  const myVal = active.filter(h=>h.market==='MY').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal||h.costBasis); },0);
-  const usVal = active.filter(h=>h.market==='US').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal||h.costBasis); },0);
-  const myPL  = active.filter(h=>h.market==='MY').reduce((s,h)=>{ const {pl}=calcStock(h); return s+(pl||0); },0);
-  const usPL  = active.filter(h=>h.market==='US').reduce((s,h)=>{ const {pl}=calcStock(h); return s+(pl||0); },0);
+  // Totals — convert everything to MYR using live rate
+  const rate = cachedRate || 0;
+  const myVal  = active.filter(h=>h.market==='MY').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal??h.costBasis); },0);
+  const usVal  = active.filter(h=>h.market==='US').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal??h.costBasis); },0);
+  const myPL   = active.filter(h=>h.market==='MY').reduce((s,h)=>{ const {pl}=calcStock(h); return s+(pl??0); },0);
+  const usPL   = active.filter(h=>h.market==='US').reduce((s,h)=>{ const {pl}=calcStock(h); return s+(pl??0); },0);
+  const totalValRM = myVal + (usVal * rate);
+  const totalPLRM  = myPL  + (usPL  * rate);
+  const totalCost  = active.reduce((s,h) => s + (h.market==='MY' ? h.costBasis : h.costBasis*rate), 0);
+  const totalPLPct = totalCost ? (totalPLRM / totalCost * 100) : 0;
 
   const now = new Date().toLocaleString('en-MY',{dateStyle:'medium',timeStyle:'short'});
   let html = '';
 
-  // Hero
-  html += `<div class="hero">
-    <div class="hero-label">Portfolio Value</div>
-    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:4px;">
-      ${myVal > 0 ? `<div><div style="font-size:10px;color:#7a9adc;margin-bottom:2px;">MYR</div><div class="hero-amount">${fmt(myVal,'MY',0)}</div><div style="font-size:12px;margin-top:3px;" class="${cc(myPL)}">${sgn(myPL,'MY')}</div></div>` : ''}
-      ${usVal > 0 ? `<div><div style="font-size:10px;color:#7a9adc;margin-bottom:2px;">USD</div><div class="hero-amount">${fmt(usVal,'US',0)}</div><div style="font-size:12px;margin-top:3px;" class="${cc(usPL)}">${sgn(usPL,'US')}</div></div>` : ''}
+  // ── Hero — matches old design exactly
+  html += `
+  <div class="hero">
+    <div class="hero-label">Total Portfolio Value</div>
+    <div class="hero-amount">${fmt(totalValRM,'MY')}</div>
+    <div class="hero-row">
+      <span class="hero-gain ${cc(totalPLRM)}">${sgn(totalPLRM,'MY')}</span>
+      <span class="hero-gain ${cc(totalPLPct)}">${totalPLPct>=0?'+':''}${totalPLPct.toFixed(2)}%</span>
+      <span class="hero-badge">USD→MYR: ${rate ? rate.toFixed(2) : '—'}</span>
     </div>
-    <div class="hero-row" style="margin-top:8px;">
-      <span style="font-size:10px;color:#7a9adc;">Updated: ${now}</span>
-      <button onclick="renderDashboard()" style="margin-left:auto;background:rgba(59,130,246,0.2);border:none;color:#7ab4ff;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;">↻ Refresh</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+      <span style="font-size:10px;color:#7a9adc;">${now}</span>
+      <button onclick="priceCache={};priceCacheTime=0;renderDashboard()" style="background:rgba(59,130,246,0.2);border:none;color:#7ab4ff;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;">↻ Refresh</button>
     </div>
   </div>`;
 
@@ -779,14 +793,27 @@ async function renderDashboard() {
 
   // Dividend section
   if (divStocks.length) {
-    const divTotal = divStocks.reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal||h.costBasis); },0);
+    const divCurVal  = divStocks.reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal??h.costBasis); },0);
+    const divCostVal = divStocks.reduce((s,h)=>s+h.costBasis,0);
+    const divPL      = divStocks.reduce((s,h)=>{ const {unrealised,realised}=calcStock(h); const dv=divMap[h.ticker]||0; return s+((unrealised??0)+realised+dv); },0);
+    const divPLPct   = divCostVal ? (divPL/divCostVal*100) : 0;
     const divTotalDV = divStocks.reduce((s,h)=>s+(divMap[h.ticker]||0),0);
     const cur = divStocks[0].market;
     html += `<div class="acc-section">
       <div class="acc-head">
         <div class="acc-head-row">
-          <div><div class="acc-type">Dividend Portfolio</div><div class="acc-val">${fmt(divTotal,cur,0)}</div></div>
-          <div class="acc-ann"><div class="acc-ann-label">Total DV Received</div><div class="acc-ann-val" style="font-size:15px;">${divTotalDV > 0 ? '+'+fmt(divTotalDV,cur) : '—'}</div></div>
+          <div>
+            <div class="acc-type">Dividend Acc</div>
+            <div class="acc-val">${fmt(divCurVal,cur)}</div>
+          </div>
+          <div class="acc-ann">
+            <div class="acc-ann-label">Est. Annual DV</div>
+            <div class="acc-ann-val">${divTotalDV>0 ? '+'+fmt(divTotalDV,cur) : '—'}</div>
+          </div>
+        </div>
+        <div class="acc-pl">
+          <span class="${cc(divPL)}">${sgn(divPL,cur)}</span>
+          <span class="${cc(divPLPct)}">${divPLPct>=0?'+':''}${divPLPct.toFixed(2)}%</span>
         </div>
       </div>
       <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>PRICE / AVG</span></div>
@@ -796,12 +823,22 @@ async function renderDashboard() {
 
   // Growth section
   if (grwStocks.length) {
-    const grwTotal = grwStocks.reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal||h.costBasis); },0);
+    const grwCurVal  = grwStocks.reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal??h.costBasis); },0);
+    const grwCostVal = grwStocks.reduce((s,h)=>s+h.costBasis,0);
+    const grwPL      = grwStocks.reduce((s,h)=>{ const {pl}=calcStock(h); return s+(pl??0); },0);
+    const grwPLPct   = grwCostVal ? (grwPL/grwCostVal*100) : 0;
     const cur = grwStocks[0].market;
     html += `<div class="acc-section">
       <div class="acc-head">
         <div class="acc-head-row">
-          <div><div class="acc-type">Growth Portfolio</div><div class="acc-val">${fmt(grwTotal,cur,0)}</div></div>
+          <div>
+            <div class="acc-type">Growth Acc</div>
+            <div class="acc-val">${fmt(grwCurVal,cur)}</div>
+          </div>
+        </div>
+        <div class="acc-pl">
+          <span class="${cc(grwPL)}">${sgn(grwPL,cur)}</span>
+          <span class="${cc(grwPLPct)}">${grwPLPct>=0?'+':''}${grwPLPct.toFixed(2)}%</span>
         </div>
       </div>
       <div class="col-head col-grow"><span>STOCKS</span><span>P/L (%)</span><span>LIVE / AVG</span><span>VALUE</span></div>
