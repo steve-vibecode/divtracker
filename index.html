@@ -573,10 +573,11 @@ function badgeColor(ticker) {
   return colors[Math.abs(h)];
 }
 
-function tickerBadge(ticker) {
+function tickerBadge(ticker, market) {
   const [bg, fg] = badgeColor(ticker);
-  const fs = ticker.length <= 3 ? '8px' : ticker.length === 4 ? '7px' : '5.5px';
-  return `<div class="ticker-badge" style="background:${bg};color:${fg};font-size:${fs};">${ticker}</div>`;
+  const label = market === 'MY' ? ticker + '.KL' : ticker;
+  const fs = label.length <= 3 ? '8px' : label.length <= 4 ? '7px' : label.length <= 6 ? '6px' : '5px';
+  return `<div class="ticker-badge" style="background:${bg};color:${fg};font-size:${fs};text-align:center;display:flex;align-items:center;justify-content:center;line-height:1.1;">${label}</div>`;
 }
 
 function today() { return new Date().toISOString().split('T')[0]; }
@@ -791,10 +792,10 @@ async function renderDashboard() {
       return `
       <div class="stock-row row-div">
         <div class="ticker-wrap">
-          ${tickerBadge(h.ticker)}
+          ${tickerBadge(h.ticker, h.market)}
           <div>
             <div class="s-name">${h.ticker}</div>
-            <div class="s-units">${h.units.toLocaleString('en',{maximumFractionDigits:4})} shares</div>
+            <div class="s-units">${h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})} shares</div>
           </div>
         </div>
         <div>
@@ -820,22 +821,22 @@ async function renderDashboard() {
       return `
       <div class="stock-row row-grow">
         <div class="ticker-wrap">
-          ${tickerBadge(h.ticker)}
+          ${tickerBadge(h.ticker, h.market)}
           <div>
             <div class="s-name">${h.ticker}</div>
-            <div class="s-units">${h.units.toLocaleString('en',{maximumFractionDigits:6})} shares</div>
+            <div class="s-units">${h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})} shares</div>
           </div>
         </div>
         <div>
           <div class="cell-main ${pl !== null ? cc(pl) : 'dim'}">${pl !== null ? sgn(pl, cur) : '—'}</div>
-          <div class="cell-pct ${plPct !== null ? cc(plPct) : 'dim'}">${plPct !== null ? pct(plPct) : 'no price'}${realised !== 0 ? ` <span style="color:var(--text2);font-size:8px;">(R:${sgn(realised,cur)})</span>` : ''}</div>
+          <div class="cell-pct ${plPct !== null ? cc(plPct) : 'dim'}">${plPct !== null ? pct(plPct) : 'no price'}</div>
         </div>
         <div>
           <div class="cell-main dim">${livePrice ? fmt(livePrice, cur) : '—'}</div>
-          <div class="cell-sub dim">${fmt(avgCost, cur)} avg</div>
+          <div class="cell-sub dim">${fmt(avgCost, cur)}</div>
         </div>
         <div>
-          <div class="cell-main ${curVal !== null ? 'neu' : 'dim'}">${curVal !== null ? fmt(curVal, cur, 0) : '—'}</div>
+          <div class="cell-main ${curVal !== null ? 'neu' : 'dim'}">${curVal !== null ? fmt(curVal, cur, 2) : '—'}</div>
         </div>
       </div>`;
     }).join('');
