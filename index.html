@@ -122,7 +122,7 @@ nav {
   text-align: center;
 }
 .col-head span:first-child { text-align: left; padding-left: 38px; }
-.col-div  { grid-template-columns: 1.5fr 1fr 1fr 0.85fr 0.85fr; }
+.col-div  { grid-template-columns: 1.5fr 1fr 1.1fr 1fr; }
 .col-grow { grid-template-columns: 1.7fr 1.1fr 1.2fr 1fr; }
 
 .stock-row {
@@ -132,7 +132,7 @@ nav {
   align-items: center;
 }
 .stock-row:last-child { border-radius: 0 0 var(--radius) var(--radius); }
-.row-div  { grid-template-columns: 1.5fr 1fr 1fr 0.85fr 0.85fr; }
+.row-div  { grid-template-columns: 1.5fr 1fr 1.1fr 1fr; }
 .row-grow { grid-template-columns: 1.7fr 1.1fr 1.2fr 1fr; }
 
 .stock-row > div { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
@@ -146,11 +146,11 @@ nav {
   letter-spacing: -0.2px; text-align: center; line-height: 1.1;
   overflow: hidden;
 }
-.s-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.s-units { font-size: 9px; color: var(--text2); margin-top: 1px; }
-.cell-main { font-size: 11px; font-weight: 600; }
-.cell-sub  { font-size: 9px; color: var(--text2); margin-top: 2px; }
-.cell-pct  { font-size: 9px; font-weight: 600; margin-top: 2px; }
+.s-name { font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.s-units { font-size: 9px; color: var(--text2); margin-top: 1px; white-space: nowrap; }
+.cell-main { font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+.cell-sub  { font-size: 9px; color: var(--text2); margin-top: 2px; white-space: nowrap; }
+.cell-pct  { font-size: 9px; font-weight: 600; margin-top: 2px; white-space: nowrap; }
 
 /* ── FORMS ── */
 .form-section { margin-bottom: 20px; }
@@ -435,9 +435,19 @@ let cachedRate = null;
 
 async function fetchLivePrices(holdings) {
   const now = Date.now();
-  if (now - priceCacheTime < 5 * 60 * 1000 && Object.keys(priceCache).length) {
-    return priceCache;
+  const cacheValid = now - priceCacheTime < 5 * 60 * 1000 && Object.keys(priceCache).length;
+
+  // Always fetch rate if we don't have it yet, even on cache hit
+  if (!cachedRate) {
+    try {
+      const rateResp = await fetch(`${WORKER_URL}/rate`);
+      const rateData = await rateResp.json();
+      if (rateData.rate && rateData.rate > 1) cachedRate = rateData.rate;
+    } catch(e) {}
   }
+
+  if (cacheValid) return priceCache;
+
   const symbols = holdings.map(h => toYahooSymbol(h.ticker, h.market));
   if (!symbols.length) return {};
   try {
@@ -447,7 +457,7 @@ async function fetchLivePrices(holdings) {
     ]);
     const data = await priceResp.json();
     const rateData = await rateResp.json();
-    cachedRate = rateData.rate || null;
+    if (rateData.rate && rateData.rate > 1) cachedRate = rateData.rate;
     priceCache = data;
     priceCacheTime = now;
     return data;
@@ -799,10 +809,6 @@ async function renderDashboard() {
           <div class="cell-main ora">${dvYieldPct}</div>
           <div class="cell-sub dim">${estAnnualDV !== null ? fmt(estAnnualDV, cur) : '—'}</div>
         </div>
-        <div>
-          <div class="cell-main neu">${livePrice ? fmt(livePrice, cur) : '—'}</div>
-          <div class="cell-sub dim">${fmt(avgCost, cur)} avg</div>
-        </div>
       </div>`;
     }).join('');
   }
@@ -839,14 +845,19 @@ async function renderDashboard() {
   const rate = cachedRate || 0;
   const toRM = (val, market) => market === 'US' ? (val ?? 0) * rate : (val ?? 0);
 
+  if (!rate) {
+    console.warn('Exchange rate missing — USD values will show as 0');
+  }
+
   const myVal  = active.filter(h=>h.market==='MY').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal??h.costBasis); },0);
   const usVal  = active.filter(h=>h.market==='US').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal??h.costBasis); },0);
 
   // P/L = unrealised + realised + dividends received (all converted to RM)
   const totalPLRM = active.reduce((s,h)=>{
     const {unrealised, realised} = calcStock(h);
-    const dv = divMap[h.ticker] || 0;
-    return s + toRM((unrealised??0) + realised + dv, h.market);
+    const capGainRM = toRM((unrealised??0) + realised, h.market);
+    const dvRM      = toRM(divMap[h.ticker] || 0, h.market);
+    return s + capGainRM + dvRM;
   }, 0);
 
   const totalValRM = myVal + (usVal * rate);
@@ -880,8 +891,6 @@ async function renderDashboard() {
 
   // Dividend section
   if (divStocks.length) {
-    // Convert everything to MYR using live rate
-    const toRM = (val, market) => market === 'US' ? (val ?? 0) * rate : (val ?? 0);
 
     const divCurVal  = divStocks.reduce((s,h)=>{ const {curVal}=calcStock(h); return s + toRM(curVal ?? h.costBasis, h.market); },0);
     const divCostVal = divStocks.reduce((s,h)=> s + toRM(h.costBasis, h.market), 0);
@@ -908,7 +917,7 @@ async function renderDashboard() {
           <div class="acc-ann-pct">${divEstYieldPct > 0 ? divEstYieldPct.toFixed(2)+'%' : ''}</div>
         </div>
       </div>
-      <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>DV% / EST DV</span><span>LIVE / AVG</span></div>
+      <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>DV% / EST DV</span></div>
       ${buildDivRows(divStocks)}
     </div>`;
   }
