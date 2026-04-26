@@ -952,9 +952,12 @@ function excelDateToISO(val) {
 
 function parseImportRow(row) {
   // row: [date, ticker, market, action, type, units, price, div_tax?]
-  const [rawDate, ticker, market, action, type, units, price, divTax] = row;
-  const date = excelDateToISO(rawDate);
-  if (!date) errors.push('missing date');
+  const [rawDate, rawTicker, market, action, type, units, price, divTax] = row;
+  const errors = [];
+  const date   = excelDateToISO(rawDate);
+  const ticker = String(rawTicker ?? '').trim().toUpperCase();
+
+  if (!date || date === 'NaN-NaN-NaN') errors.push('missing/invalid date');
   if (!ticker) errors.push('missing ticker');
   const mkt = String(market||'').trim().toUpperCase();
   if (!['US','MY'].includes(mkt)) errors.push(`market must be US or MY`);
@@ -971,8 +974,8 @@ function parseImportRow(row) {
     valid: errors.length === 0,
     errors,
     data: {
-      date: String(date).trim(),
-      ticker: String(ticker).trim().toUpperCase(),
+      date,
+      ticker,
       market: mkt,
       action: act,
       type: typ,
