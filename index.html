@@ -529,6 +529,18 @@ async function addTransaction() {
     showToast('Please fill in all required fields', true); return;
   }
 
+  // Check if ticker already exists — enforce same type and market
+  const existing = await dbGetAll('transactions');
+  const prev = existing.find(t => t.ticker === ticker);
+  if (prev) {
+    if (prev.type !== type) {
+      showToast(`${ticker} is already set as ${prev.type}. Type cannot be changed.`, true); return;
+    }
+    if (prev.market !== market) {
+      showToast(`${ticker} is already set as ${prev.market} market. Market cannot be changed.`, true); return;
+    }
+  }
+
   await dbAdd('transactions', { ticker, market, action, type, units, price, date, notes, createdAt: Date.now() });
   showToast(`${action === 'buy' ? 'Bought' : 'Sold'} ${ticker} logged!`);
 
@@ -802,10 +814,22 @@ async function renderDashboard() {
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 openDB().then(() => {
-  // Set default dates
   document.getElementById('txn-date').value = today();
   document.getElementById('div-date').value = today();
   renderDashboard();
+
+  // Auto-fill type + market when ticker already exists
+  document.getElementById('txn-ticker').addEventListener('blur', async function() {
+    const ticker = this.value.trim().toUpperCase();
+    if (!ticker) return;
+    const existing = await dbGetAll('transactions');
+    const prev = existing.find(t => t.ticker === ticker);
+    if (prev) {
+      document.getElementById('txn-market').value = prev.market;
+      document.getElementById('txn-type').value   = prev.type;
+      showToast(`${ticker}: auto-set to ${prev.type} / ${prev.market}`);
+    }
+  });
 });
 </script>
 </body>
