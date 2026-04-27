@@ -400,11 +400,25 @@ nav {
   </div>
 </div>
 
+<!-- DV SUMMARY PAGE -->
+<div class="page" id="page-dvsummary">
+  <div id="dvsummary-content">
+    <div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18M9 17V9m4 8v-4m4 4V5"/></svg>
+      <p>No dividend data yet.</p>
+    </div>
+  </div>
+</div>
+
 <!-- BOTTOM NAV -->
 <nav>
   <div class="nav-btn active" id="nav-dashboard" onclick="goPage('dashboard')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M9 17V9m4 8v-4m4 4V5"/></svg>
     <span>Dashboard</span>
+  </div>
+  <div class="nav-btn" id="nav-dvsummary" onclick="goPage('dvsummary')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+    <span>DV Summary</span>
   </div>
   <div class="nav-btn" id="nav-transactions" onclick="goPage('transactions')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m-4-4 4 4 4-4M8 8l4-4 4 4"/></svg>
@@ -525,6 +539,7 @@ function goPage(name) {
   document.getElementById('page-' + name).classList.add('active');
   document.getElementById('nav-' + name).classList.add('active');
   if (name === 'dashboard') renderDashboard();
+  if (name === 'dvsummary') renderDVSummary();
   if (name === 'transactions') renderTxnLog();
   if (name === 'dividends') renderDivLog();
 }
@@ -1106,6 +1121,197 @@ function cancelImport() {
   importRows = [];
   document.getElementById('import-preview').style.display = 'none';
   document.getElementById('import-file').value = '';
+}
+
+// ── DV SUMMARY ────────────────────────────────────────────────────────────────
+async function renderDVSummary() {
+  const el = document.getElementById('dvsummary-content');
+  const [txns, divs] = await Promise.all([dbGetAll('transactions'), dbGetAll('dividends')]);
+
+  if (!txns.length) {
+    el.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18M9 17V9m4 8v-4m4 4V5"/></svg><p>No transactions yet.</p></div>`;
+    return;
+  }
+
+  // Build holdings
+  const holdings = {};
+  const realisedGain = {};
+  for (const t of txns) {
+    if (!holdings[t.ticker]) holdings[t.ticker] = { ticker: t.ticker, market: t.market, type: t.type, units: 0, costBasis: 0 };
+    const h = holdings[t.ticker];
+    if (t.action === 'buy') { h.costBasis += t.units * t.price; h.units += t.units; }
+    else {
+      const avg = h.units ? h.costBasis / h.units : 0;
+      realisedGain[t.ticker] = (realisedGain[t.ticker] || 0) + (t.price - avg) * t.units;
+      h.costBasis -= avg * t.units; h.units -= t.units;
+    }
+  }
+
+  const divTaxMap = {};
+  for (const t of txns) { if (t.type === 'dividend' && t.divTax != null) divTaxMap[t.ticker] = t.divTax; }
+
+  const active = Object.values(holdings).filter(h => h.units > 0.00001 && h.type === 'dividend');
+  if (!active.length) { el.innerHTML = `<div class="empty"><p>No dividend stocks found.</p></div>`; return; }
+
+  // Show loading
+  el.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text2);font-size:13px;">Fetching prices...</div>`;
+
+  const prices = await fetchLivePrices(active);
+  const hasPrices = Object.keys(prices).length > 0 && !prices.error;
+  const rate = cachedRate || 0;
+  const toRM = (val, market) => market === 'US' ? (val ?? 0) * rate : (val ?? 0);
+
+  const currentYear = new Date().getFullYear();
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Dividends received per ticker and per month (current year only)
+  const divMap = {};
+  const monthlyTotals = Array(12).fill(0);
+  for (const d of divs) {
+    divMap[d.ticker] = (divMap[d.ticker] || 0) + d.amount;
+    const y = parseInt((d.date || '').slice(0, 4));
+    const m = parseInt((d.date || '').slice(5, 7)) - 1;
+    if (y === currentYear && m >= 0 && m < 12) {
+      monthlyTotals[m] += toRM(d.amount, d.market);
+    }
+  }
+
+  // Per-stock calc
+  const stockRows = active.map(h => {
+    const yahooSym  = toYahooSymbol(h.ticker, h.market);
+    const quote     = hasPrices ? prices[yahooSym] : null;
+    const livePrice = quote?.price ?? null;
+    const divYield  = quote?.divYield ?? null;
+    const divRate   = quote?.divRate  ?? null;
+    const curVal    = livePrice ? livePrice * h.units : null;
+    const taxRate   = (divTaxMap[h.ticker] || 0) / 100;
+    const rawEstDV  = divRate !== null ? divRate * h.units : (divYield !== null && curVal !== null ? divYield * curVal : null);
+    const estAnnDV  = rawEstDV !== null ? rawEstDV * (1 - taxRate) : null;
+    const netYield  = divYield !== null ? divYield * (1 - taxRate) : null;
+    const dvRecv    = divMap[h.ticker] || 0;
+    const costBasis = h.costBasis;
+    const unrealised = curVal !== null ? curVal - costBasis : null;
+    const realised  = realisedGain[h.ticker] || 0;
+    const plInclDV  = (unrealised ?? 0) + realised + dvRecv;
+    return { ...h, livePrice, curVal, netYield, estAnnDV, dvRecv, plInclDV, costBasis };
+  });
+
+  // Totals in RM
+  const totalAssets   = stockRows.reduce((s, r) => s + toRM(r.curVal ?? r.costBasis, r.market), 0);
+  const totalCost     = stockRows.reduce((s, r) => s + toRM(r.costBasis, r.market), 0);
+  const totalPLInclDV = stockRows.reduce((s, r) => s + toRM(r.plInclDV, r.market), 0);
+  const totalPLExclDV = stockRows.reduce((s, r) => s + toRM((r.curVal ?? r.costBasis) - r.costBasis + (realisedGain[r.ticker]||0), r.market), 0);
+  const totalDVThisYear = monthlyTotals.reduce((s, v) => s + v, 0);
+  const totalEstAnnDV = stockRows.reduce((s, r) => s + toRM(r.estAnnDV ?? 0, r.market), 0);
+  const totalDVYield  = totalAssets ? (totalEstAnnDV / totalAssets * 100) : 0;
+
+  // Bar chart
+  const maxVal = Math.max(...monthlyTotals, 1);
+  const chartH = 120;
+  const barW = 18; const barGap = 6;
+  const chartW = (barW + barGap) * 12 - barGap;
+  const bars = monthlyTotals.map((v, i) => {
+    const h = v > 0 ? Math.max((v / maxVal) * chartH, 4) : 0;
+    const x = i * (barW + barGap);
+    const color = v > 0 ? '#3b82f6' : '#1e2d45';
+    return `<g>
+      <rect x="${x}" y="${chartH - h}" width="${barW}" height="${h}" rx="3" fill="${color}"/>
+      ${v > 0 ? `<text x="${x + barW/2}" y="${chartH - h - 4}" text-anchor="middle" font-size="7" fill="#7a8aaa">RM${v>=1000?(v/1000).toFixed(1)+'k':v.toFixed(0)}</text>` : ''}
+      <text x="${x + barW/2}" y="${chartH + 12}" text-anchor="middle" font-size="8" fill="#4a5a7a">${MONTHS[i]}</text>
+    </g>`;
+  }).join('');
+
+  // Y-axis labels
+  const yLabels = [0, 0.25, 0.5, 0.75, 1].map(f => {
+    const val = maxVal * f;
+    const y = chartH - f * chartH;
+    return `<text x="-4" y="${y + 3}" text-anchor="end" font-size="7" fill="#4a5a7a">${val>=1000?(val/1000).toFixed(1)+'k':val.toFixed(0)}</text>
+    <line x1="0" y1="${y}" x2="${chartW}" y2="${y}" stroke="#1e2d45" stroke-width="0.5" stroke-dasharray="3,3"/>`;
+  }).join('');
+
+  // Stock breakdown rows
+  const breakdownRows = stockRows.map(r => {
+    const dvYieldStr = r.netYield !== null ? (r.netYield * 100).toFixed(2) + '%' : '#N/A';
+    const estAnnStr  = r.estAnnDV !== null ? 'RM' + toRM(r.estAnnDV, r.market).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}) : '#N/A';
+    const dvRecvRM   = toRM(r.dvRecv, r.market);
+    const name = r.market === 'MY' ? r.ticker + '.KL' : r.ticker;
+    const [bg, fg] = badgeColor(r.ticker);
+    return `
+    <div style="display:grid;grid-template-columns:1.4fr 1.2fr 0.8fr 1fr;column-gap:6px;padding:10px 14px;border-top:1px solid var(--border);background:var(--card);align-items:center;">
+      <div style="display:flex;align-items:center;gap:7px;">
+        <div style="width:34px;height:24px;border-radius:6px;background:${bg};color:${fg};font-size:${name.length<=4?'7':'5.5'}px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${name}</div>
+        <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:11px;font-weight:600;" class="pos">+RM${dvRecvRM.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:11px;font-weight:600;" class="${r.netYield !== null ? 'ora' : 'dim'}">${dvYieldStr}</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:11px;font-weight:600;" class="${r.estAnnDV !== null ? 'ora' : 'dim'}">${estAnnStr}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <!-- Header stats -->
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">Total Dividend Assets</div>
+        <div style="font-size:16px;font-weight:700;">RM${totalAssets.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+        <div style="font-size:10px;color:var(--text2);">P/L include DV</div>
+        <div style="font-size:13px;font-weight:600;" class="${cc(totalPLInclDV)}">${totalPLInclDV>=0?'+':'-'}RM${Math.abs(totalPLInclDV).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--border);padding-top:8px;">
+        <div style="font-size:10px;color:var(--text2);">P/L excl DV</div>
+        <div style="font-size:13px;font-weight:600;" class="${cc(totalPLExclDV)}">${totalPLExclDV>=0?'+':'-'}RM${Math.abs(totalPLExclDV).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      </div>
+    </div>
+
+    <!-- DV received this year -->
+    <div style="background:linear-gradient(135deg,#0f1f45,#1a2f60);border:1px solid #1e3a7a;border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;text-align:center;">
+      <div style="font-size:10px;color:#7a9adc;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">DV Received ${currentYear}</div>
+      <div style="font-size:26px;font-weight:800;color:#10b981;">RM${totalDVThisYear.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+    </div>
+
+    <!-- Yield + Est Annual cards -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;">
+        <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Dividend Yield %</div>
+        <div style="font-size:22px;font-weight:800;" class="ora">${totalDVYield > 0 ? totalDVYield.toFixed(2)+'%' : '—'}</div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;">
+        <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Est Annual DV</div>
+        <div style="font-size:18px;font-weight:800;" class="ora">RM${totalEstAnnDV > 0 ? totalEstAnnDV.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</div>
+      </div>
+    </div>
+
+    <!-- Bar chart -->
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:600;">${currentYear} Monthly Distribution</div>
+        <div style="font-size:11px;color:var(--text2);">Total: RM${totalDVThisYear.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      </div>
+      <svg viewBox="-28 -16 ${chartW + 32} ${chartH + 28}" width="100%" style="overflow:visible;">
+        ${yLabels}
+        ${bars}
+      </svg>
+    </div>
+
+    <!-- Breakdown table -->
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px;">
+      <div style="padding:10px 14px;border-bottom:1px solid var(--border);">
+        <div style="font-size:12px;font-weight:600;">Dividends Breakdown ${currentYear}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1.4fr 1.2fr 0.8fr 1fr;column-gap:6px;padding:6px 14px;background:#111827;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;font-weight:600;text-align:center;">
+        <span style="text-align:left;">Stocks</span><span>DV Received</span><span>DV %</span><span>Est Annual DV</span>
+      </div>
+      ${breakdownRows}
+    </div>
+  `;
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
