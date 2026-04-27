@@ -796,6 +796,10 @@ async function renderDashboard() {
           <div>
             <div class="s-name">${h.market === 'MY' ? h.ticker + '.KL' : h.ticker}</div>
             <div class="s-units">${h.market === 'MY' ? h.units.toLocaleString('en',{maximumFractionDigits:0}) : h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})} shares</div>
+          </div>
+        </div>
+        <div>
+          <div class="cell-main ${totalPL !== null ? cc(totalPL) : 'dim'}">${totalPL !== null ? sgn(totalPL, cur) : '—'}</div>
           <div class="cell-pct ${totalPLPct !== null ? cc(totalPLPct) : 'dim'}">${totalPLPct !== null ? pct(totalPLPct) : 'no price'}</div>
         </div>
         <div>
@@ -821,6 +825,10 @@ async function renderDashboard() {
           <div>
             <div class="s-name">${h.market === 'MY' ? h.ticker + '.KL' : h.ticker}</div>
             <div class="s-units">${h.market === 'MY' ? h.units.toLocaleString('en',{maximumFractionDigits:0}) : h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})} shares</div>
+          </div>
+        </div>
+        <div>
+          <div class="cell-main ${pl !== null ? cc(pl) : 'dim'}">${pl !== null ? sgn(pl, cur) : '—'}</div>
           <div class="cell-pct ${plPct !== null ? cc(plPct) : 'dim'}">${plPct !== null ? pct(plPct) : 'no price'}</div>
         </div>
         <div>
