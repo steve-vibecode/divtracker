@@ -1164,14 +1164,16 @@ async function renderDVSummary() {
   const currentYear = new Date().getFullYear();
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  // Dividends received per ticker and per month (current year only)
+  // Dividends received per ticker (all time) and per month (current year only)
   const divMap = {};
+  const divMapThisYear = {};
   const monthlyTotals = Array(12).fill(0);
   for (const d of divs) {
     divMap[d.ticker] = (divMap[d.ticker] || 0) + d.amount;
     const y = parseInt((d.date || '').slice(0, 4));
     const m = parseInt((d.date || '').slice(5, 7)) - 1;
     if (y === currentYear && m >= 0 && m < 12) {
+      divMapThisYear[d.ticker] = (divMapThisYear[d.ticker] || 0) + d.amount;
       monthlyTotals[m] += toRM(d.amount, d.market);
     }
   }
@@ -1189,11 +1191,12 @@ async function renderDVSummary() {
     const estAnnDV  = rawEstDV !== null ? rawEstDV * (1 - taxRate) : null;
     const netYield  = divYield !== null ? divYield * (1 - taxRate) : null;
     const dvRecv    = divMap[h.ticker] || 0;
+    const dvRecvThisYear = divMapThisYear[h.ticker] || 0;
     const costBasis = h.costBasis;
     const unrealised = curVal !== null ? curVal - costBasis : null;
     const realised  = realisedGain[h.ticker] || 0;
     const plInclDV  = (unrealised ?? 0) + realised + dvRecv;
-    return { ...h, livePrice, curVal, netYield, estAnnDV, dvRecv, plInclDV, costBasis };
+    return { ...h, livePrice, curVal, netYield, estAnnDV, dvRecv, dvRecvThisYear, plInclDV, costBasis };
   });
 
   // Totals in RM
@@ -1201,6 +1204,7 @@ async function renderDVSummary() {
   const totalCost     = stockRows.reduce((s, r) => s + toRM(r.costBasis, r.market), 0);
   const totalPLInclDV = stockRows.reduce((s, r) => s + toRM(r.plInclDV, r.market), 0);
   const totalPLExclDV = stockRows.reduce((s, r) => s + toRM((r.curVal ?? r.costBasis) - r.costBasis + (realisedGain[r.ticker]||0), r.market), 0);
+  const totalDVThisYear = monthlyTotals.reduce((s, v) => s + v, 0);
   const totalDVThisYear = monthlyTotals.reduce((s, v) => s + v, 0);
   const totalEstAnnDV = stockRows.reduce((s, r) => s + toRM(r.estAnnDV ?? 0, r.market), 0);
   const totalDVYield  = totalAssets ? (totalEstAnnDV / totalAssets * 100) : 0;
@@ -1233,7 +1237,7 @@ async function renderDVSummary() {
   const breakdownRows = stockRows.map(r => {
     const dvYieldStr = r.netYield !== null ? (r.netYield * 100).toFixed(2) + '%' : '#N/A';
     const estAnnStr  = r.estAnnDV !== null ? 'RM' + toRM(r.estAnnDV, r.market).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}) : '#N/A';
-    const dvRecvRM   = toRM(r.dvRecv, r.market);
+    const dvRecvRM   = toRM(r.dvRecvThisYear, r.market);
     const name = r.market === 'MY' ? r.ticker + '.KL' : r.ticker;
     const [bg, fg] = badgeColor(r.ticker);
     return `
