@@ -1205,7 +1205,6 @@ async function renderDVSummary() {
   const totalPLInclDV = stockRows.reduce((s, r) => s + toRM(r.plInclDV, r.market), 0);
   const totalPLExclDV = stockRows.reduce((s, r) => s + toRM((r.curVal ?? r.costBasis) - r.costBasis + (realisedGain[r.ticker]||0), r.market), 0);
   const totalDVThisYear = monthlyTotals.reduce((s, v) => s + v, 0);
-  const totalDVThisYear = monthlyTotals.reduce((s, v) => s + v, 0);
   const totalEstAnnDV = stockRows.reduce((s, r) => s + toRM(r.estAnnDV ?? 0, r.market), 0);
   const totalDVYield  = totalAssets ? (totalEstAnnDV / totalAssets * 100) : 0;
 
