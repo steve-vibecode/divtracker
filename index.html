@@ -221,7 +221,18 @@ nav {
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar { display: none; }
 
-/* ── TOAST ── */
+/* ── SKELETON LOADER ── */
+.skeleton {
+  background: linear-gradient(90deg, var(--card) 25%, var(--border) 50%, var(--card) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+  display: inline-block;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 .toast {
   position: fixed; bottom: calc(var(--nav-h) + 12px); left: 50%;
   transform: translateX(-50%) translateY(20px);
@@ -522,6 +533,50 @@ async function fetchLivePrices(holdings) {
   }
 }
 
+function skeletonDashboard(label) {
+  const sk = (w, h=14, r=6) => `<div class="skeleton" style="width:${w};height:${h}px;border-radius:${r}px;"></div>`;
+  return `
+  <!-- Skeleton hero -->
+  <div class="hero" style="position:relative;">
+    <div class="hero-label">${label}</div>
+    ${sk('60%', 38, 8)}
+    <div style="display:flex;gap:10px;margin-top:10px;">${sk('28%')} ${sk('18%')}</div>
+    <div style="display:flex;justify-content:space-between;margin-top:8px;">${sk('35%',10)} ${sk('22%',10)}</div>
+  </div>
+  <!-- Skeleton dividend acc -->
+  <div class="acc-section">
+    <div class="acc-head">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">${sk('30%',10)} ${sk('20%',10)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;">${sk('45%',22,6)} ${sk('30%',22,6)}</div>
+      <div style="display:flex;gap:10px;margin-top:6px;">${sk('32%')} ${sk('18%')}</div>
+    </div>
+    <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>DV% / EST DV</span></div>
+    ${[1,2,3,4].map(()=>`
+    <div class="stock-row row-div">
+      <div style="display:flex;align-items:center;gap:8px;">${sk('34px',24,6)} <div>${sk('60px',11)} <div style="margin-top:4px;">${sk('50px',9)}</div></div></div>
+      <div>${sk('70%',11)} <div style="margin-top:4px;">${sk('50%',9)}</div></div>
+      <div>${sk('80%',11)} <div style="margin-top:4px;">${sk('60%',9)}</div></div>
+      <div>${sk('60%',11)} <div style="margin-top:4px;">${sk('70%',9)}</div></div>
+    </div>`).join('')}
+  </div>
+  <!-- Skeleton growth acc -->
+  <div class="acc-section">
+    <div class="acc-head">
+      <div>${sk('25%',10)}</div>
+      <div style="margin-top:6px;">${sk('40%',22,6)}</div>
+      <div style="display:flex;gap:10px;margin-top:6px;">${sk('28%')} ${sk('16%')}</div>
+    </div>
+    <div class="col-head col-grow"><span>STOCKS</span><span>P/L (%)</span><span>LIVE / AVG</span><span>VALUE</span></div>
+    ${[1,2,3,4].map(()=>`
+    <div class="stock-row row-grow">
+      <div style="display:flex;align-items:center;gap:8px;">${sk('34px',24,6)} <div>${sk('55px',11)} <div style="margin-top:4px;">${sk('45px',9)}</div></div></div>
+      <div>${sk('65%',11)} <div style="margin-top:4px;">${sk('45%',9)}</div></div>
+      <div>${sk('75%',11)} <div style="margin-top:4px;">${sk('55%',9)}</div></div>
+      <div>${sk('70%',11)}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
 // ── DB ────────────────────────────────────────────────────────────────────────
 let db;
 const DB_NAME = 'folio', DB_VER = 1;
@@ -807,8 +862,7 @@ async function renderDashboard() {
   if (!active.length) { el.innerHTML = `<div class="empty"><p>All positions closed.</p></div>`; return; }
 
   // Show skeleton while fetching prices
-  el.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text2);font-size:13px;">
-    <div class="spinner" style="margin:0 auto 12px;border-top-color:var(--accent);"></div>Fetching live prices...</div>`;
+  el.innerHTML = skeletonDashboard('Total Portfolio Value');
 
   // Fetch live prices
   const prices = await fetchLivePrices(active);
@@ -1466,7 +1520,7 @@ async function renderDashboardHistorical(year) {
     return;
   }
 
-  el.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text2);font-size:13px;">Fetching ${year} closing prices...</div>`;
+  el.innerHTML = skeletonDashboard(`Portfolio Value — ${year} Year End`);
 
   // Fetch year-end closing prices + current data for DV yield
   const symbols = active.map(h => toYahooSymbol(h.ticker, h.market));
