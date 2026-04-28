@@ -943,7 +943,7 @@ async function renderDashboard() {
           <div class="cell-pct ${plPct !== null ? cc(plPct) : 'dim'}">${plPct !== null ? pct(plPct) : 'no price'}</div>
         </div>
         <div>
-          <div class="cell-main dim">${livePrice ? fmt(livePrice, cur) : '—'}</div>
+          <div class="cell-main neu">${livePrice ? fmt(livePrice, cur) : '—'}</div>
           <div class="cell-sub dim">${fmt(avgCost, cur)} avg</div>
         </div>
         <div>
@@ -1616,7 +1616,7 @@ async function renderDashboardHistorical(year) {
           <div class="cell-pct ${plPct !== null ? cc(plPct) : 'dim'}">${plPct !== null ? pct(plPct) : 'no price'}</div>
         </div>
         <div>
-          <div class="cell-main dim">${livePrice ? fmt(livePrice, cur) : '—'}</div>
+          <div class="cell-main neu">${livePrice ? fmt(livePrice, cur) : '—'}</div>
           <div class="cell-sub dim">${fmt(avgCost, cur)} avg</div>
         </div>
         <div>
