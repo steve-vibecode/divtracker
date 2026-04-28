@@ -1326,23 +1326,23 @@ async function renderDVSummary() {
 }
 
 // ── YEAR SELECTOR ─────────────────────────────────────────────────────────────
-let historicalPriceCache = {}; // keyed by year
+let cachedTxns = [];
+let historicalPriceCache = {};
 
 function populateYearSelector(txns) {
+  cachedTxns = txns;
   const sel = document.getElementById('year-select');
+  if (!sel) return;
   const currentYear = new Date().getFullYear();
-  // Find earliest transaction year
   const years = txns.map(t => parseInt((t.date || '').slice(0, 4))).filter(y => !isNaN(y));
+  if (!years.length) return;
   const minYear = Math.min(...years);
-  // Add past years (from minYear to last year)
-  const existingVals = Array.from(sel.options).map(o => o.value);
+  // Clear and rebuild options to avoid duplicates
+  sel.innerHTML = '<option value="current">Live</option>';
   for (let y = currentYear - 1; y >= Math.max(minYear, 2025); y--) {
-    if (!existingVals.includes(String(y))) {
-      const opt = document.createElement('option');
-      opt.value = y; opt.textContent = String(y);
-      // Insert after "Live" option
-      sel.insertBefore(opt, sel.options[1]);
-    }
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = String(y);
+    sel.appendChild(opt);
   }
 }
 
@@ -1604,12 +1604,8 @@ async function renderDashboardHistorical(year) {
 openDB().then(async () => {
   document.getElementById('txn-date').value = today();
   document.getElementById('div-date').value = today().slice(0, 7);
-
-  // Populate year selector based on earliest transaction
-  const txns = await dbGetAll('transactions');
-  if (txns.length) populateYearSelector(txns);
-
-  renderDashboard();
+  await renderDashboard();
+});
 
   // Auto-fill type + market when ticker already exists
   document.getElementById('txn-ticker').addEventListener('blur', async function() {
