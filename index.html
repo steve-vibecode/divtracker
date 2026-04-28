@@ -971,7 +971,7 @@ async function renderDashboard() {
   el.innerHTML = html;
   populateYearSelector(txns);
   const sel = document.getElementById('year-select');
-  if (sel) sel.value = 'current';
+  if (sel) sel.value = selectedYear;
 }
 
 // ── IMPORT ────────────────────────────────────────────────────────────────────
@@ -1346,10 +1346,14 @@ function populateYearSelector(txns) {
   }
 }
 
+let selectedYear = 'current';
+
 function onYearChange() {
-  const val = document.getElementById('year-select').value;
-  if (val === 'current') renderDashboard();
-  else renderDashboardHistorical(parseInt(val));
+  const sel = document.getElementById('year-select');
+  if (!sel) return;
+  selectedYear = sel.value;
+  if (selectedYear === 'current') renderDashboard();
+  else renderDashboardHistorical(parseInt(selectedYear));
 }
 
 async function fetchHistoricalPrices(symbols, year) {
@@ -1605,7 +1609,6 @@ openDB().then(async () => {
   document.getElementById('txn-date').value = today();
   document.getElementById('div-date').value = today().slice(0, 7);
   await renderDashboard();
-});
 
   // Auto-fill type + market when ticker already exists
   document.getElementById('txn-ticker').addEventListener('blur', async function() {
