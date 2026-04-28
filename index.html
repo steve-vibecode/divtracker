@@ -238,6 +238,12 @@ nav {
 
 <!-- PAGES -->
 <div class="page active" id="page-dashboard">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px;">
+    <div style="font-size:11px;color:var(--text2);">Portfolio View</div>
+    <select id="year-select" onchange="onYearChange()" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--text);font-size:12px;font-weight:600;outline:none;-webkit-appearance:none;">
+      <option value="current">Live</option>
+    </select>
+  </div>
   <div id="dashboard-content">
     <div class="empty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18M9 17V9m4 8v-4m4 4V5"/></svg>
@@ -1317,10 +1323,282 @@ async function renderDVSummary() {
   `;
 }
 
+// ── YEAR SELECTOR ─────────────────────────────────────────────────────────────
+let historicalPriceCache = {}; // keyed by year
+
+function populateYearSelector(txns) {
+  const sel = document.getElementById('year-select');
+  const currentYear = new Date().getFullYear();
+  // Find earliest transaction year
+  const years = txns.map(t => parseInt((t.date || '').slice(0, 4))).filter(y => !isNaN(y));
+  const minYear = Math.min(...years);
+  // Add past years (from minYear to last year)
+  const existingVals = Array.from(sel.options).map(o => o.value);
+  for (let y = currentYear - 1; y >= Math.max(minYear, 2025); y--) {
+    if (!existingVals.includes(String(y))) {
+      const opt = document.createElement('option');
+      opt.value = y; opt.textContent = String(y);
+      // Insert after "Live" option
+      sel.insertBefore(opt, sel.options[1]);
+    }
+  }
+}
+
+function onYearChange() {
+  const val = document.getElementById('year-select').value;
+  if (val === 'current') renderDashboard();
+  else renderDashboardHistorical(parseInt(val));
+}
+
+async function fetchHistoricalPrices(symbols, year) {
+  const key = `${year}:${symbols.sort().join(',')}`;
+  if (historicalPriceCache[key]) return historicalPriceCache[key];
+  try {
+    const resp = await fetch(`${WORKER_URL}/history?symbols=${symbols.join(',')}&year=${year}`);
+    const data = await resp.json();
+    historicalPriceCache[key] = data;
+    return data;
+  } catch (e) {
+    console.warn('Historical price fetch failed:', e);
+    return {};
+  }
+}
+
+async function renderDashboardHistorical(year) {
+  const el = document.getElementById('dashboard-content');
+  const [txns, divs] = await Promise.all([dbGetAll('transactions'), dbGetAll('dividends')]);
+
+  const cutoff = new Date(`${year}-12-31T23:59:59`).getTime();
+
+  // Build holdings as of Dec 31 of selected year
+  const holdings = {};
+  const realisedGain = {};
+  for (const t of txns) {
+    const tDate = new Date(t.date).getTime();
+    if (tDate > cutoff) continue; // ignore transactions after year end
+    if (!holdings[t.ticker]) holdings[t.ticker] = { ticker: t.ticker, market: t.market, type: t.type, units: 0, costBasis: 0 };
+    const h = holdings[t.ticker];
+    if (t.action === 'buy') { h.costBasis += t.units * t.price; h.units += t.units; }
+    else {
+      const avg = h.units ? h.costBasis / h.units : 0;
+      realisedGain[t.ticker] = (realisedGain[t.ticker] || 0) + (t.price - avg) * t.units;
+      h.costBasis -= avg * t.units; h.units -= t.units;
+    }
+  }
+
+  // Dividends received in selected year only
+  const divMap = {};
+  for (const d of divs) {
+    const dYear = parseInt((d.date || '').slice(0, 4));
+    if (dYear === year) divMap[d.ticker] = (divMap[d.ticker] || 0) + d.amount;
+  }
+
+  const divTaxMap = {};
+  for (const t of txns) { if (t.type === 'dividend' && t.divTax != null) divTaxMap[t.ticker] = t.divTax; }
+
+  const active = Object.values(holdings).filter(h => h.units > 0.00001);
+  if (!active.length) {
+    el.innerHTML = `<div class="empty"><p>No holdings in ${year}.</p></div>`;
+    return;
+  }
+
+  el.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text2);font-size:13px;">Fetching ${year} closing prices...</div>`;
+
+  // Fetch year-end closing prices + current data for DV yield
+  const symbols = active.map(h => toYahooSymbol(h.ticker, h.market));
+  const [histPrices, livePrices] = await Promise.all([
+    fetchHistoricalPrices(symbols, year),
+    fetchLivePrices(active),
+  ]);
+
+  // Also fetch historical USD/MYR rate for Dec 31 of that year
+  let histRate = cachedRate || 0;
+  try {
+    const rateResp = await fetch(`${WORKER_URL}/history?symbols=MYR%3DX&year=${year}`);
+    const rateData = await rateResp.json();
+    if (rateData['MYR=X']?.price) histRate = rateData['MYR=X'].price;
+  } catch (_) {}
+
+  const rate = histRate || cachedRate || 0;
+  const toRM = (val, market) => market === 'US' ? (val ?? 0) * rate : (val ?? 0);
+
+  const divStocks = active.filter(h => h.type === 'dividend');
+  const grwStocks = active.filter(h => h.type === 'growth');
+
+  function calcHistStock(h) {
+    const yahooSym   = toYahooSymbol(h.ticker, h.market);
+    const livePrice  = histPrices[yahooSym]?.price ?? null;
+    // DV yield from current live data
+    const liveQuote  = livePrices[yahooSym];
+    const divYield   = liveQuote?.divYield ?? null;
+    const divRate    = liveQuote?.divRate  ?? null;
+    const avgCost    = h.units ? h.costBasis / h.units : 0;
+    const curVal     = livePrice ? livePrice * h.units : null;
+    const unrealised = curVal !== null ? curVal - h.costBasis : null;
+    const realised   = realisedGain[h.ticker] || 0;
+    const pl         = unrealised !== null ? unrealised + realised : null;
+    const plPct      = pl !== null && h.costBasis ? (pl / h.costBasis * 100) : null;
+    const taxRate    = (divTaxMap[h.ticker] || 0) / 100;
+    // Est DV based on units held at year end × current rate
+    const rawEstDV   = divRate !== null ? divRate * h.units : (divYield !== null && curVal !== null ? divYield * curVal : null);
+    const estAnnualDV = rawEstDV !== null ? rawEstDV * (1 - taxRate) : null;
+    const netDivYield = divYield !== null ? divYield * (1 - taxRate) : null;
+    return { livePrice, avgCost, curVal, unrealised, realised, pl, plPct, divYield: netDivYield, estAnnualDV };
+  }
+
+  function buildDivRowsHist(stocks) {
+    return stocks.map(h => {
+      const { livePrice, avgCost, curVal, unrealised, realised, divYield, estAnnualDV } = calcHistStock(h);
+      const dvRecv     = divMap[h.ticker] || 0;
+      const capGain    = unrealised !== null ? unrealised + realised : null;
+      const totalPL    = capGain !== null ? capGain + dvRecv : null;
+      const totalPLPct = totalPL !== null && h.costBasis ? (totalPL / h.costBasis * 100) : null;
+      const dvYieldPct = divYield !== null ? (divYield * 100).toFixed(2) + '%' : '—';
+      const cur = h.market;
+      return `
+      <div class="stock-row row-div">
+        <div class="ticker-wrap">
+          ${tickerBadge(h.ticker, h.market)}
+          <div>
+            <div class="s-name">${h.market === 'MY' ? h.ticker + '.KL' : h.ticker}</div>
+            <div class="s-units">${h.market === 'MY' ? h.units.toLocaleString('en',{maximumFractionDigits:0}) : h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})} shares</div>
+          </div>
+        </div>
+        <div>
+          <div class="cell-main ${totalPL !== null ? cc(totalPL) : 'dim'}">${totalPL !== null ? sgn(totalPL, cur) : '—'}</div>
+          <div class="cell-pct ${totalPLPct !== null ? cc(totalPLPct) : 'dim'}">${totalPLPct !== null ? pct(totalPLPct) : 'no price'}</div>
+        </div>
+        <div>
+          <div class="cell-main ${capGain !== null ? cc(capGain) : 'dim'}">${capGain !== null ? sgn(capGain, cur) : '—'}</div>
+          <div class="cell-sub ${dvRecv > 0 ? 'pos' : 'dim'}">${dvRecv > 0 ? '+'+fmt(dvRecv, cur) : 'no div yet'}</div>
+        </div>
+        <div>
+          <div class="cell-main ora">${dvYieldPct}</div>
+          <div class="cell-sub dim">${estAnnualDV !== null ? fmt(estAnnualDV, cur) : '—'}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function buildGrwRowsHist(stocks) {
+    return stocks.map(h => {
+      const { livePrice, avgCost, curVal, unrealised, realised, pl, plPct } = calcHistStock(h);
+      const cur = h.market;
+      return `
+      <div class="stock-row row-grow">
+        <div class="ticker-wrap">
+          ${tickerBadge(h.ticker, h.market)}
+          <div>
+            <div class="s-name">${h.market === 'MY' ? h.ticker + '.KL' : h.ticker}</div>
+            <div class="s-units">${h.market === 'MY' ? h.units.toLocaleString('en',{maximumFractionDigits:0}) : h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})} shares</div>
+          </div>
+        </div>
+        <div>
+          <div class="cell-main ${pl !== null ? cc(pl) : 'dim'}">${pl !== null ? sgn(pl, cur) : '—'}</div>
+          <div class="cell-pct ${plPct !== null ? cc(plPct) : 'dim'}">${plPct !== null ? pct(plPct) : 'no price'}</div>
+        </div>
+        <div>
+          <div class="cell-main dim">${livePrice ? fmt(livePrice, cur) : '—'}</div>
+          <div class="cell-sub dim">${fmt(avgCost, cur)}</div>
+        </div>
+        <div>
+          <div class="cell-main ${curVal !== null ? 'neu' : 'dim'}">${curVal !== null ? fmt(curVal, cur, 2) : '—'}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Totals
+  const myVal     = active.filter(h=>h.market==='MY').reduce((s,h)=>{ const {curVal}=calcHistStock(h); return s+(curVal??h.costBasis); },0);
+  const usVal     = active.filter(h=>h.market==='US').reduce((s,h)=>{ const {curVal}=calcHistStock(h); return s+(curVal??h.costBasis); },0);
+  const totalValRM = myVal + (usVal * rate);
+  const totalPLRM  = active.reduce((s,h)=>{
+    const {unrealised,realised}=calcHistStock(h);
+    return s + toRM((unrealised??0)+realised, h.market) + toRM(divMap[h.ticker]||0, h.market);
+  },0);
+  const totalCost  = active.reduce((s,h) => s + toRM(h.costBasis, h.market), 0);
+  const totalPLPct = totalCost ? (totalPLRM / totalCost * 100) : 0;
+
+  let html = '';
+
+  html += `
+  <div class="hero">
+    <div class="hero-label">Portfolio Value — ${year} Year End</div>
+    <div class="hero-amount">${fmt(totalValRM,'MY')}</div>
+    <div class="hero-row">
+      <span class="hero-gain ${cc(totalPLRM)}">${totalPLRM>=0?'+':'-'}RM${Math.abs(totalPLRM).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+      <span class="hero-gain ${cc(totalPLPct)}">${totalPLPct>=0?'+':''}${totalPLPct.toFixed(2)}%</span>
+      <span class="hero-badge">USD→MYR: ${rate ? rate.toFixed(2) : '—'}</span>
+    </div>
+    <div style="font-size:10px;color:#7a9adc;margin-top:6px;">Closing prices: 31 Dec ${year}</div>
+  </div>`;
+
+  if (divStocks.length) {
+    const divCurVal  = divStocks.reduce((s,h)=>{ const {curVal}=calcHistStock(h); return s+toRM(curVal??h.costBasis,h.market); },0);
+    const divCostVal = divStocks.reduce((s,h)=>s+toRM(h.costBasis,h.market),0);
+    const divPL      = divStocks.reduce((s,h)=>{ const {unrealised,realised}=calcHistStock(h); return s+toRM((unrealised??0)+realised,h.market)+toRM(divMap[h.ticker]||0,h.market); },0);
+    const divPLPct   = divCostVal ? (divPL/divCostVal*100) : 0;
+    const divEstAnnual = divStocks.reduce((s,h)=>{ const {estAnnualDV}=calcHistStock(h); return s+toRM(estAnnualDV??0,h.market); },0);
+    const divEstYieldPct = divCurVal ? (divEstAnnual/divCurVal*100) : 0;
+    html += `<div class="acc-section">
+      <div class="acc-head">
+        <div class="acc-head-row" style="align-items:baseline;">
+          <div class="acc-type">Dividend Acc</div>
+          <div class="acc-ann-label">Est. Annual DV</div>
+        </div>
+        <div class="acc-head-row" style="align-items:baseline;margin-top:2px;">
+          <div class="acc-val">RM${divCurVal.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          <div class="acc-ann-val">RM${divEstAnnual>0?divEstAnnual.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}):'—'}</div>
+        </div>
+        <div class="acc-head-row" style="align-items:baseline;margin-top:4px;">
+          <div class="acc-pl" style="margin-top:0;">
+            <span class="${cc(divPL)}">${divPL>=0?'+':'-'}RM${Math.abs(divPL).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+            <span class="${cc(divPLPct)}">${divPLPct>=0?'+':''}${divPLPct.toFixed(2)}%</span>
+          </div>
+          <div class="acc-ann-pct">${divEstYieldPct>0?divEstYieldPct.toFixed(2)+'%':''}</div>
+        </div>
+      </div>
+      <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>DV% / EST DV</span></div>
+      ${buildDivRowsHist(divStocks)}
+    </div>`;
+  }
+
+  if (grwStocks.length) {
+    const grwCurVal  = grwStocks.reduce((s,h)=>{ const {curVal}=calcHistStock(h); return s+(curVal??h.costBasis); },0);
+    const grwCostVal = grwStocks.reduce((s,h)=>s+h.costBasis,0);
+    const grwPL      = grwStocks.reduce((s,h)=>{ const {pl}=calcHistStock(h); return s+(pl??0); },0);
+    const grwPLPct   = grwCostVal ? (grwPL/grwCostVal*100) : 0;
+    const cur = grwStocks[0].market;
+    html += `<div class="acc-section">
+      <div class="acc-head">
+        <div class="acc-head-row" style="align-items:baseline;">
+          <div class="acc-type">Growth Acc</div>
+        </div>
+        <div class="acc-head-row" style="align-items:baseline;margin-top:2px;">
+          <div class="acc-val">${fmt(grwCurVal,cur)}</div>
+        </div>
+        <div class="acc-pl" style="margin-top:4px;">
+          <span class="${cc(grwPL)}">${grwPL>=0?'+':'-'}${cur==='MY'?'RM':'$'}${Math.abs(grwPL).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+          <span class="${cc(grwPLPct)}">${grwPLPct>=0?'+':''}${grwPLPct.toFixed(2)}%</span>
+        </div>
+      </div>
+      <div class="col-head col-grow"><span>STOCKS</span><span>P/L (%)</span><span>CLOSE / AVG</span><span>VALUE</span></div>
+      ${buildGrwRowsHist(grwStocks)}
+    </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
-openDB().then(() => {
+openDB().then(async () => {
   document.getElementById('txn-date').value = today();
   document.getElementById('div-date').value = today().slice(0, 7);
+
+  // Populate year selector based on earliest transaction
+  const txns = await dbGetAll('transactions');
+  if (txns.length) populateYearSelector(txns);
+
   renderDashboard();
 
   // Auto-fill type + market when ticker already exists
