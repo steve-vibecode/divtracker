@@ -402,6 +402,12 @@ nav {
 
 <!-- DV SUMMARY PAGE -->
 <div class="page" id="page-dvsummary">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div style="font-size:18px;font-weight:700;letter-spacing:-0.3px;">DV Summary</div>
+    <select id="dvsummary-year" onchange="renderDVSummary()" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--text);font-size:12px;font-weight:600;outline:none;-webkit-appearance:none;">
+      <option value="current">Current Year</option>
+    </select>
+  </div>
   <div id="dvsummary-content">
     <div class="empty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18M9 17V9m4 8v-4m4 4V5"/></svg>
@@ -1135,6 +1141,23 @@ async function renderDVSummary() {
     return;
   }
 
+  // Populate year dropdown from dividend data years
+  const sel = document.getElementById('dvsummary-year');
+  const thisYear = new Date().getFullYear();
+  const divYears = [...new Set(divs.map(d => parseInt((d.date||'').slice(0,4))).filter(y => !isNaN(y) && y > 0))].sort((a,b) => b-a);
+  const currentOptions = Array.from(sel.options).map(o => o.value);
+  for (const y of divYears) {
+    if (!currentOptions.includes(String(y))) {
+      const opt = document.createElement('option');
+      opt.value = y; opt.textContent = String(y);
+      sel.appendChild(opt);
+    }
+  }
+
+  // Determine selected year
+  const selVal = sel.value;
+  const currentYear = selVal === 'current' ? thisYear : parseInt(selVal);
+
   // Build holdings
   const holdings = {};
   const realisedGain = {};
@@ -1163,7 +1186,6 @@ async function renderDVSummary() {
   const rate = cachedRate || 0;
   const toRM = (val, market) => market === 'US' ? (val ?? 0) * rate : (val ?? 0);
 
-  const currentYear = new Date().getFullYear();
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   // Dividends received per ticker (all time) and per month (current year only)
