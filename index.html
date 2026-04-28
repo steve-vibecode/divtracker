@@ -1454,7 +1454,7 @@ function populateYearSelector(txns, currentVal) {
   if (!pastYears.length) return;
   let opts = '<option value="current">Live</option>';
   for (const y of pastYears) opts += `<option value="${y}">${y}</option>`;
-  wrap.innerHTML = `<select onchange="onYearChange()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:4px 8px;color:white;font-size:11px;font-weight:700;outline:none;-webkit-appearance:none;cursor:pointer;">${opts}</select>`;
+  wrap.innerHTML = `<select onchange="onYearChange()" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:4px 10px;color:var(--text);font-size:11px;font-weight:700;outline:none;-webkit-appearance:none;cursor:pointer;">${opts}</select>`;
   wrap.querySelector('select').value = currentVal || 'current';
 }
 
