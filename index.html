@@ -1145,6 +1145,8 @@ async function renderDVSummary() {
   const sel = document.getElementById('dvsummary-year');
   const thisYear = new Date().getFullYear();
   const divYears = [...new Set(divs.map(d => parseInt((d.date||'').slice(0,4))).filter(y => !isNaN(y) && y > 0 && y < thisYear))].sort((a,b) => b-a);
+  // Preserve selected value before rebuilding options
+  const prevVal = sel.value;
   // Rebuild past year options (keep "Current Year" only)
   Array.from(sel.options).forEach(o => { if (o.value !== 'current') o.remove(); });
   for (const y of divYears) {
@@ -1152,15 +1154,19 @@ async function renderDVSummary() {
     opt.value = y; opt.textContent = String(y);
     sel.appendChild(opt);
   }
+  // Restore selection
+  sel.value = prevVal;
 
   // Determine selected year
   const selVal = sel.value;
   const currentYear = selVal === 'current' ? thisYear : parseInt(selVal);
+  const cutoff = selVal === 'current' ? Date.now() : new Date(`${currentYear}-12-31T23:59:59`).getTime();
 
-  // Build holdings
+  // Build holdings up to cutoff date
   const holdings = {};
   const realisedGain = {};
   for (const t of txns) {
+    if (new Date(t.date).getTime() > cutoff) continue;
     if (!holdings[t.ticker]) holdings[t.ticker] = { ticker: t.ticker, market: t.market, type: t.type, units: 0, costBasis: 0 };
     const h = holdings[t.ticker];
     if (t.action === 'buy') { h.costBasis += t.units * t.price; h.units += t.units; }
