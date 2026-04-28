@@ -1274,7 +1274,7 @@ async function renderDVSummary() {
   if (!active.length) { el.innerHTML = `<div class="empty"><p>No dividend stocks found.</p></div>`; return; }
 
   // Show loading
-  el.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text2);font-size:13px;">Fetching prices...</div>`;
+  el.innerHTML = skeletonDashboard('DV Summary');
 
   const prices = await fetchLivePrices(active);
   const hasPrices = Object.keys(prices).length > 0 && !prices.error;
