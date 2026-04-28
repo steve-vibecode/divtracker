@@ -1354,13 +1354,14 @@ function populateYearSelector(txns, currentVal) {
   cachedTxns = txns;
   const wrap = document.getElementById('year-select-wrap');
   if (!wrap) return;
-  const currentYear = new Date().getFullYear();
-  const years = txns.map(t => parseInt((t.date || '').slice(0, 4))).filter(y => !isNaN(y));
+  const thisYear = new Date().getFullYear();
+  const years = txns.map(t => parseInt((t.date || '').slice(0, 4))).filter(y => !isNaN(y) && y > 0);
   if (!years.length) return;
   const minYear = Math.min(...years);
+  // All past years from minYear up to last year
   const pastYears = [];
-  for (let y = currentYear - 1; y >= Math.max(minYear, 2025); y--) pastYears.push(y);
-  if (!pastYears.length) return; // no past years, hide selector
+  for (let y = thisYear - 1; y >= minYear; y--) pastYears.push(y);
+  if (!pastYears.length) return;
   let opts = '<option value="current">Live</option>';
   for (const y of pastYears) opts += `<option value="${y}">${y}</option>`;
   wrap.innerHTML = `<select onchange="onYearChange()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:4px 8px;color:white;font-size:11px;font-weight:700;outline:none;-webkit-appearance:none;cursor:pointer;">${opts}</select>`;
