@@ -550,7 +550,7 @@ function skeletonDashboard(label) {
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;">${sk('45%',22,6)} ${sk('30%',22,6)}</div>
       <div style="display:flex;gap:10px;margin-top:6px;">${sk('32%')} ${sk('18%')}</div>
     </div>
-    <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>DV% / EST DV</span></div>
+    <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>LIVE / AVG</span></div>
     ${[1,2,3,4].map(()=>`
     <div class="stock-row row-div">
       <div style="display:flex;align-items:center;gap:8px;">${sk('34px',24,6)} <div>${sk('60px',11)} <div style="margin-top:4px;">${sk('50px',9)}</div></div></div>
@@ -918,8 +918,8 @@ async function renderDashboard() {
           <div class="cell-sub ${dvRecv > 0 ? 'pos' : 'dim'}">${dvRecv > 0 ? '+'+fmt(dvRecv, cur) : 'no div yet'}</div>
         </div>
         <div>
-          <div class="cell-main ora">${dvYieldPct}</div>
-          <div class="cell-sub dim">${estAnnualDV !== null ? fmt(estAnnualDV, cur) : '—'}</div>
+          <div class="cell-main neu">${livePrice ? fmt(livePrice, cur) : '—'}</div>
+          <div class="cell-sub dim">${fmt(avgCost, cur)} avg</div>
         </div>
       </div>`;
     }).join('');
@@ -1030,7 +1030,7 @@ async function renderDashboard() {
           <div class="acc-ann-pct">${divEstYieldPct > 0 ? divEstYieldPct.toFixed(2)+'%' : ''}</div>
         </div>
       </div>
-      <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>DV% / EST DV</span></div>
+      <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>LIVE / AVG</span></div>
       ${buildDivRows(divStocks)}
     </div>`;
   }
@@ -1591,8 +1591,8 @@ async function renderDashboardHistorical(year) {
           <div class="cell-sub ${dvRecv > 0 ? 'pos' : 'dim'}">${dvRecv > 0 ? '+'+fmt(dvRecv, cur) : 'no div yet'}</div>
         </div>
         <div>
-          <div class="cell-main ora">${dvYieldPct}</div>
-          <div class="cell-sub dim">${estAnnualDV !== null ? fmt(estAnnualDV, cur) : '—'}</div>
+          <div class="cell-main neu">${livePrice ? fmt(livePrice, cur) : '—'}</div>
+          <div class="cell-sub dim">${fmt(avgCost, cur)} avg</div>
         </div>
       </div>`;
     }).join('');
@@ -1677,7 +1677,7 @@ async function renderDashboardHistorical(year) {
           <div class="acc-ann-pct">${divEstYieldPct>0?divEstYieldPct.toFixed(2)+'%':''}</div>
         </div>
       </div>
-      <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>DV% / EST DV</span></div>
+      <div class="col-head col-div"><span>STOCKS</span><span>P/L (%)</span><span>CAP GAIN / DV</span><span>LIVE / AVG</span></div>
       ${buildDivRowsHist(divStocks)}
     </div>`;
   }
