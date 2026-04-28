@@ -238,11 +238,6 @@ nav {
 
 <!-- PAGES -->
 <div class="page active" id="page-dashboard">
-  <div id="year-selector-wrap" style="display:none;justify-content:flex-end;padding:2px 0 6px;">
-    <select id="year-select" onchange="onYearChange()" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--text);font-size:12px;font-weight:600;outline:none;-webkit-appearance:none;">
-      <option value="current">Live</option>
-    </select>
-  </div>
   <div id="dashboard-content">
     <div class="empty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18M9 17V9m4 8v-4m4 4V5"/></svg>
@@ -890,7 +885,7 @@ async function renderDashboard() {
 
   // ── Hero — matches old design exactly
   html += `
-  <div class="hero">
+  <div class="hero" style="position:relative;">
     <div class="hero-label">Total Portfolio Value</div>
     <div class="hero-amount">${fmt(totalValRM,'MY')}</div>
     <div class="hero-row">
@@ -902,6 +897,7 @@ async function renderDashboard() {
       <span style="font-size:10px;color:#7a9adc;">${now}</span>
       <button onclick="priceCache={};priceCacheTime=0;renderDashboard()" style="background:rgba(59,130,246,0.2);border:none;color:#7ab4ff;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;">↻ Refresh</button>
     </div>
+    <div id="year-select-wrap" style="position:absolute;top:12px;right:14px;"></div>
   </div>`;
 
   if (!hasPrices) {
@@ -969,8 +965,7 @@ async function renderDashboard() {
   }
 
   el.innerHTML = html;
-  populateYearSelector(txns);
-  document.getElementById('year-select').value = 'current';
+  populateYearSelector(txns, 'current');
 }
 
 // ── IMPORT ────────────────────────────────────────────────────────────────────
@@ -1328,30 +1323,27 @@ async function renderDVSummary() {
 let cachedTxns = [];
 let historicalPriceCache = {};
 
-function populateYearSelector(txns) {
+function populateYearSelector(txns, currentVal) {
   cachedTxns = txns;
-  const sel = document.getElementById('year-select');
-  const wrap = document.getElementById('year-selector-wrap');
-  if (!sel) return;
+  const wrap = document.getElementById('year-select-wrap');
+  if (!wrap) return;
   const currentYear = new Date().getFullYear();
   const years = txns.map(t => parseInt((t.date || '').slice(0, 4))).filter(y => !isNaN(y));
   if (!years.length) return;
   const minYear = Math.min(...years);
-  // Clear and rebuild
-  sel.innerHTML = '<option value="current">Live</option>';
-  for (let y = currentYear - 1; y >= Math.max(minYear, 2025); y--) {
-    const opt = document.createElement('option');
-    opt.value = y; opt.textContent = String(y);
-    sel.appendChild(opt);
-  }
-  // Show selector only if there are past years
-  if (wrap) wrap.style.display = sel.options.length > 1 ? 'flex' : 'none';
+  const pastYears = [];
+  for (let y = currentYear - 1; y >= Math.max(minYear, 2025); y--) pastYears.push(y);
+  if (!pastYears.length) return; // no past years, hide selector
+  let opts = '<option value="current">Live</option>';
+  for (const y of pastYears) opts += `<option value="${y}">${y}</option>`;
+  wrap.innerHTML = `<select onchange="onYearChange()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:4px 8px;color:white;font-size:11px;font-weight:700;outline:none;-webkit-appearance:none;cursor:pointer;">${opts}</select>`;
+  wrap.querySelector('select').value = currentVal || 'current';
 }
 
 let selectedYear = 'current';
 
 function onYearChange() {
-  const sel = document.getElementById('year-select');
+  const sel = document.querySelector('#year-select-wrap select');
   if (!sel) return;
   selectedYear = sel.value;
   if (selectedYear === 'current') renderDashboard();
@@ -1530,7 +1522,7 @@ async function renderDashboardHistorical(year) {
   let html = '';
 
   html += `
-  <div class="hero">
+  <div class="hero" style="position:relative;">
     <div class="hero-label">Portfolio Value — ${year} Year End</div>
     <div class="hero-amount">${fmt(totalValRM,'MY')}</div>
     <div class="hero-row">
@@ -1539,6 +1531,7 @@ async function renderDashboardHistorical(year) {
       <span class="hero-badge">USD→MYR: ${rate ? rate.toFixed(2) : '—'}</span>
     </div>
     <div style="font-size:10px;color:#7a9adc;margin-top:6px;">Closing prices: 31 Dec ${year}</div>
+    <div id="year-select-wrap" style="position:absolute;top:12px;right:14px;"></div>
   </div>`;
 
   if (divStocks.length) {
@@ -1596,8 +1589,7 @@ async function renderDashboardHistorical(year) {
   }
 
   el.innerHTML = html;
-  populateYearSelector(txns);
-  document.getElementById('year-select').value = String(year);
+  populateYearSelector(txns, String(year));
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
