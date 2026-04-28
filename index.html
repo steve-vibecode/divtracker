@@ -520,11 +520,13 @@ async function fetchLivePrices(holdings) {
   const cacheValid = now - priceCacheTime < 5 * 60 * 1000 && Object.keys(priceCache).length;
 
   // Always fetch rate if we don't have it yet, even on cache hit
-  if (!cachedRate) {
+  if (!cachedRate || !cachedSgdRate) {
     try {
       const rateResp = await fetch(`${WORKER_URL}/rate`);
       const rateData = await rateResp.json();
-      if (rateData.rate && rateData.rate > 1) cachedRate = rateData.rate;
+  
+      if (rateData.usdMyr && rateData.usdMyr > 1) cachedRate = rateData.usdMyr;
+      if (rateData.sgdMyr && rateData.sgdMyr > 1) cachedSgdRate = rateData.sgdMyr;
     } catch(e) {}
   }
 
@@ -1097,7 +1099,7 @@ async function renderDashboard() {
           <div class="acc-val">${fmt(grwCurVal,cur)}</div>
         </div>
         <div class="acc-pl" style="margin-top:4px;">
-          <span class="${cc(grwPL)}">${grwPL>=0?'+':'-'}${cur==='MY'?'RM':'$'}${Math.abs(grwPL).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+          <span class="${cc(grwPL)}">${grwPL>=0?'+':'-'}${cur === 'MY' ? 'RM' : cur === 'SG' ? 'S$' : '$'}${Math.abs(grwPL).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
           <span class="${cc(grwPLPct)}">${grwPLPct>=0?'+':''}${grwPLPct.toFixed(2)}%</span>
         </div>
       </div>
@@ -1142,7 +1144,7 @@ function parseImportRow(row) {
   if (!date || date === 'NaN-NaN-NaN') errors.push('missing/invalid date');
   if (!ticker) errors.push('missing ticker');
   const mkt = String(market||'').trim().toUpperCase();
-  if (!['US','MY','SG'].includes(mkt)) errors.push(`market must be US or MY`);
+  if (!['US','MY','SG'].includes(mkt)) errors.push(`market must be US/MY/SG`);
   const act = String(action||'').trim().toLowerCase();
   if (!['buy','sell'].includes(act)) errors.push(`action must be buy or sell`);
   const typ = String(type||'').trim().toLowerCase();
@@ -1704,7 +1706,7 @@ async function renderDashboardHistorical(year) {
   const totalValRM =
     myVal +
     (usVal * rate) +
-    (sgVal * histSgdRate);
+    (sgVal * sgdRate);
   
   const totalPLRM = active.reduce((s, h) => {
     const { unrealised, realised } = calcHistStock(h);
@@ -1733,7 +1735,7 @@ async function renderDashboardHistorical(year) {
       <span class="hero-gain ${cc(totalPLPct)}">${totalPLPct>=0?'+':''}${totalPLPct.toFixed(2)}%</span>
       <span class="hero-badge">
         USD→MYR: ${rate ? rate.toFixed(2) : '—'}<br>
-        SGD→MYR: ${histSgdRate ? histSgdRate.toFixed(2) : '—'}
+        SGD→MYR: ${sgdRate ? sgdRate.toFixed(2) : '—'}
       </span>
     </div>
     <div style="font-size:10px;color:#7a9adc;margin-top:6px;">Closing prices: 31 Dec ${year}</div>
