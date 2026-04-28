@@ -362,6 +362,7 @@ nav {
   <div class="segment">
     <button class="seg-btn active" onclick="switchSeg('div','add')">Add</button>
     <button class="seg-btn" onclick="switchSeg('div','log')">History</button>
+    <button class="seg-btn" onclick="switchSeg('div','import')">Import</button>
   </div>
   <div id="div-add">
     <div class="form-section">
@@ -397,6 +398,40 @@ nav {
   </div>
   <div id="div-log" style="display:none;">
     <div id="div-list"></div>
+  </div>
+  <div id="div-import" style="display:none;">
+    <div class="form-section">
+      <div class="form-title">Import Dividends from CSV / Excel</div>
+      <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8;">
+        <div style="font-weight:700;color:var(--accent);margin-bottom:6px;">Required column order:</div>
+        <div style="font-family:monospace;font-size:11px;color:var(--text);">ticker | market | amount | month</div>
+        <div style="margin-top:8px;font-size:11px;">
+          • <b>ticker</b>: e.g. JEPQ, 1155<br>
+          • <b>market</b>: US or MY<br>
+          • <b>amount</b>: e.g. 150.00<br>
+          • <b>month</b>: YYYY-MM (e.g. 2025-03)<br>
+          &nbsp;&nbsp;Also accepts: Mar-2025 · March 2025 · 03/2025 · 2025/03
+        </div>
+      </div>
+      <button class="btn" onclick="downloadDivTemplate()" style="background:rgba(59,130,246,0.15);color:var(--accent);border:1px solid rgba(59,130,246,0.3);margin-bottom:12px;">
+        ↓ Download CSV Template
+      </button>
+      <div onclick="document.getElementById('div-import-file').click()"
+        style="border:2px dashed var(--border);border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;margin-bottom:12px;">
+        <div style="font-size:28px;margin-bottom:8px;">📂</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text);">Tap to select file</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px;">Supports .csv and .xlsx</div>
+      </div>
+      <input type="file" id="div-import-file" accept=".csv,.xlsx" style="display:none;" onchange="handleDivImportFile(this)"/>
+      <div id="div-import-preview" style="display:none;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text);">Preview</div>
+        <div id="div-import-preview-list"></div>
+        <div style="display:flex;gap:10px;margin-top:12px;">
+          <button class="btn btn-success" onclick="confirmDivImport()" id="div-import-confirm-btn">Import All</button>
+          <button class="btn" onclick="cancelDivImport()" style="background:rgba(239,68,68,0.1);color:var(--red);border:1px solid rgba(239,68,68,0.2);">Cancel</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -557,13 +592,14 @@ function switchSeg(page, tab) {
     document.getElementById('txn-import').style.display = tab === 'import' ? 'block' : 'none';
     if (tab === 'log') renderTxnLog();
   } else {
-    document.getElementById('div-add').style.display = tab === 'add' ? 'block' : 'none';
-    document.getElementById('div-log').style.display = tab === 'log' ? 'block' : 'none';
+    document.getElementById('div-add').style.display    = tab === 'add'    ? 'block' : 'none';
+    document.getElementById('div-log').style.display    = tab === 'log'    ? 'block' : 'none';
+    document.getElementById('div-import').style.display = tab === 'import' ? 'block' : 'none';
     if (tab === 'log') renderDivLog();
   }
   const pageId = page === 'txn' ? 'transactions' : 'dividends';
   const btns = document.querySelectorAll(`#page-${pageId} .seg-btn`);
-  const tabs = page === 'txn' ? ['add','log','import'] : ['add','log'];
+  const tabs = page === 'txn' ? ['add','log','import'] : ['add','log','import'];
   btns.forEach((b, i) => b.classList.toggle('active', tabs[i] === tab));
 }
 
@@ -1618,6 +1654,147 @@ async function renderDashboardHistorical(year) {
 
   el.innerHTML = html;
   populateYearSelector(txns, String(year));
+}
+
+// ── DIVIDEND IMPORT ───────────────────────────────────────────────────────────
+let divImportRows = [];
+
+function downloadDivTemplate() {
+  const csv = `ticker,market,amount,month\nJEPQ,US,150.00,2025-03\n1155,MY,891.00,2025-02\n5176,MY,645.88,2025-01\n`;
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'dividends-template.csv'; a.click();
+}
+
+function parseMonthToYYYYMM(val) {
+  if (!val && val !== 0) return null;
+  const s = String(val).trim();
+
+  // Excel serial number
+  if (/^\d{4,5}$/.test(s) || (typeof val === 'number' && val > 1000)) {
+    const n = typeof val === 'number' ? val : parseInt(s);
+    const d = new Date((n - 25569) * 86400 * 1000);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  }
+
+  // YYYY-MM or YYYY/MM
+  if (/^\d{4}[-\/]\d{1,2}$/.test(s)) {
+    const [y, m] = s.split(/[-\/]/);
+    return `${y}-${m.padStart(2,'0')}`;
+  }
+
+  // MM-YYYY or MM/YYYY
+  if (/^\d{1,2}[-\/]\d{4}$/.test(s)) {
+    const [m, y] = s.split(/[-\/]/);
+    return `${y}-${m.padStart(2,'0')}`;
+  }
+
+  // Mon-YYYY or Mon YYYY (e.g. Mar-2025, March 2025)
+  const months = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+  const mMatch = s.match(/([a-zA-Z]+)[\s\-\/](\d{4})/);
+  if (mMatch) {
+    const mKey = mMatch[1].toLowerCase().slice(0,3);
+    if (months[mKey]) return `${mMatch[2]}-${months[mKey]}`;
+  }
+  // YYYY Mon (e.g. 2025 Mar)
+  const mMatch2 = s.match(/(\d{4})[\s\-\/]([a-zA-Z]+)/);
+  if (mMatch2) {
+    const mKey = mMatch2[2].toLowerCase().slice(0,3);
+    if (months[mKey]) return `${mMatch2[1]}-${months[mKey]}`;
+  }
+
+  // YYYY-MM-DD — just take year-month
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(0, 7);
+
+  return null;
+}
+
+function parseDivImportRow(row) {
+  const [rawTicker, market, amount, rawMonth] = row;
+  const errors = [];
+  const ticker = String(rawTicker ?? '').trim().toUpperCase();
+  const mkt    = String(market ?? '').trim().toUpperCase();
+  const amt    = parseFloat(amount);
+  const month  = parseMonthToYYYYMM(rawMonth);
+
+  if (!ticker) errors.push('missing ticker');
+  if (!['US','MY'].includes(mkt)) errors.push('market must be US or MY');
+  if (isNaN(amt) || amt <= 0) errors.push('invalid amount');
+  if (!month) errors.push(`invalid month: "${rawMonth}" — use YYYY-MM`);
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    data: { ticker, market: mkt, amount: amt, date: month, notes: '', createdAt: month ? new Date(month+'-01').getTime() : Date.now() }
+  };
+}
+
+function handleDivImportFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const isCsv = file.name.endsWith('.csv');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let rows = [];
+    if (isCsv) {
+      rows = e.target.result.trim().split('\n').map(line => {
+        const cells = []; let cur = ''; let inQ = false;
+        for (let ch of line) {
+          if (ch === '"') { inQ = !inQ; }
+          else if (ch === ',' && !inQ) { cells.push(cur.trim()); cur = ''; }
+          else cur += ch;
+        }
+        cells.push(cur.trim()); return cells;
+      });
+    } else {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: true });
+    }
+    // Skip header
+    if (rows.length && isNaN(rows[0][0]) && String(rows[0][0]).toLowerCase().includes('ticker')) rows = rows.slice(1);
+    rows = rows.filter(r => r.some(c => c !== '' && c !== null && c !== undefined));
+    divImportRows = rows.map((r, i) => ({ rowNum: i + 2, ...parseDivImportRow(r) }));
+    renderDivImportPreview();
+  };
+  if (isCsv) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+}
+
+function renderDivImportPreview() {
+  const preview = document.getElementById('div-import-preview');
+  const list    = document.getElementById('div-import-preview-list');
+  const validCount = divImportRows.filter(r => r.valid).length;
+  const errCount   = divImportRows.filter(r => !r.valid).length;
+  preview.style.display = 'block';
+  document.getElementById('div-import-confirm-btn').textContent = `Import ${validCount} rows`;
+  list.innerHTML = divImportRows.map(r => `
+    <div style="background:${r.valid?'rgba(16,185,129,0.06)':'rgba(239,68,68,0.06)'};border:1px solid ${r.valid?'rgba(16,185,129,0.2)':'rgba(239,68,68,0.2)'};border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:11px;">
+      <div style="display:flex;justify-content:space-between;">
+        <span style="font-weight:700;color:var(--text);">Row ${r.rowNum}: ${r.data?.ticker||'?'}</span>
+        <span style="color:${r.valid?'var(--green)':'var(--red)'};">${r.valid?'✓ Valid':'✗ Error'}</span>
+      </div>
+      ${r.valid
+        ? `<div style="color:var(--text2);margin-top:2px;">${r.data.date} · ${r.data.market==='MY'?'RM':'$'}${r.data.amount} · ${r.data.market}</div>`
+        : `<div style="color:var(--red);margin-top:2px;">${r.errors.join(', ')}</div>`}
+    </div>`).join('');
+  if (errCount > 0) list.innerHTML += `<div style="font-size:11px;color:var(--text2);margin-top:4px;">⚠️ ${errCount} row(s) with errors will be skipped.</div>`;
+}
+
+async function confirmDivImport() {
+  const valid = divImportRows.filter(r => r.valid).map(r => r.data);
+  if (!valid.length) { showToast('No valid rows to import', true); return; }
+  for (const row of valid) await dbAdd('dividends', row);
+  showToast(`✓ Imported ${valid.length} dividends!`);
+  divImportRows = [];
+  document.getElementById('div-import-preview').style.display = 'none';
+  document.getElementById('div-import-file').value = '';
+  switchSeg('div', 'log');
+}
+
+function cancelDivImport() {
+  divImportRows = [];
+  document.getElementById('div-import-preview').style.display = 'none';
+  document.getElementById('div-import-file').value = '';
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
