@@ -38,9 +38,9 @@ body {
 }
 
 /* ── PAGES ── */
-.page { display: none; flex-direction: column; height: calc(100vh - var(--nav-h)); overflow-y: auto; padding: 10px 14px 32px; }
+.page { display: none; flex-direction: column; min-height: calc(100vh - var(--nav-h)); overflow-y: auto; padding: 10px 14px calc(var(--nav-h) + 24px); }
 .page.active { display: flex; }
-.page#page-dashboard { padding: 8px 14px 32px; }
+.page#page-dashboard { padding: 8px 14px calc(var(--nav-h) + 24px); }
 .page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 16px; }
 
 /* ── NAV ── */
