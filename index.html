@@ -1141,17 +1141,16 @@ async function renderDVSummary() {
     return;
   }
 
-  // Populate year dropdown from dividend data years
+  // Populate year dropdown from dividend data years (past years only)
   const sel = document.getElementById('dvsummary-year');
   const thisYear = new Date().getFullYear();
-  const divYears = [...new Set(divs.map(d => parseInt((d.date||'').slice(0,4))).filter(y => !isNaN(y) && y > 0))].sort((a,b) => b-a);
-  const currentOptions = Array.from(sel.options).map(o => o.value);
+  const divYears = [...new Set(divs.map(d => parseInt((d.date||'').slice(0,4))).filter(y => !isNaN(y) && y > 0 && y < thisYear))].sort((a,b) => b-a);
+  // Rebuild past year options (keep "Current Year" only)
+  Array.from(sel.options).forEach(o => { if (o.value !== 'current') o.remove(); });
   for (const y of divYears) {
-    if (!currentOptions.includes(String(y))) {
-      const opt = document.createElement('option');
-      opt.value = y; opt.textContent = String(y);
-      sel.appendChild(opt);
-    }
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = String(y);
+    sel.appendChild(opt);
   }
 
   // Determine selected year
