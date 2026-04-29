@@ -1239,8 +1239,11 @@ function renderImportPreview() {
 }
 
 async function confirmImport() {
+  const btn = document.getElementById('import-confirm-btn');
+  if (btn.disabled) return;
+  btn.disabled = true; btn.textContent = 'Importing...';
   const valid = importRows.filter(r => r.valid).map(r => r.data);
-  if (!valid.length) { showToast('No valid rows to import', true); return; }
+  if (!valid.length) { showToast('No valid rows to import', true); btn.disabled = false; return; }
 
   // Type/market conflict check
   const existing = await dbGetAll('transactions');
