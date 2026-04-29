@@ -832,14 +832,14 @@ async function renderDivLog() {
       </div>
       <div class="log-right">
         <div class="log-amount pos">+${fmt(d.amount, d.market)}</div>
-        <button class="btn btn-danger" onclick="deleteTxn('${d.id}')">Delete</button>
+        <button class="btn btn-danger" onclick="deleteDiv('${d.id}')">Delete</button>
       </div>
     </div>`).join('');
 }
 
 async function deleteDiv(id) {
   await dbDelete('dividends', id);
-  renderDivLog();
+  await renderDivLog();
   showToast('Dividend deleted');
 }
 
