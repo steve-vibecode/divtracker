@@ -832,7 +832,7 @@ async function renderDivLog() {
       </div>
       <div class="log-right">
         <div class="log-amount pos">+${fmt(d.amount, d.market)}</div>
-        <button class="btn btn-danger" onclick="deleteTxn('${t.id}')">Delete</button>
+        <button class="btn btn-danger" onclick="deleteTxn('${d.id}')">Delete</button>
       </div>
     </div>`).join('');
 }
