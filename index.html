@@ -1647,7 +1647,8 @@ async function renderDashboardHistorical(year) {
 
   // Totals
   const myVal     = active.filter(h=>h.market==='MY').reduce((s,h)=>{ const {curVal}=calcHistStock(h); return s+(curVal??h.costBasis); },0);
-  const usVal     = active.filter(h=>h.market==='US').reduce((s,h)=>{ const {curVal}=calcHistStock(h); return s+(curVal??h.costBasis); },0);
+  const usVal     = active.filter(h=>h.market==='US'||h.market==='CRYPTO').reduce((s,h)=>{ const {curVal}=calcHistStock(h); return s+(curVal??h.costBasis); },0);
+  const sgVal     = active.filter(h=>h.market==='SG').reduce((s,h)=>{ const {curVal}=calcHistStock(h); return s+(curVal??h.costBasis); },0);
   const totalValRM = myVal + (usVal * rate) + (sgVal * sgdRate);
   const totalPLRM  = active.reduce((s,h)=>{
     const {unrealised,realised}=calcHistStock(h);
