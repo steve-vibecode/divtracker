@@ -245,7 +245,6 @@ nav {
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.error { background: var(--red); }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -592,44 +591,54 @@ function skeletonDashboard(label) {
   </div>`;
 }
 
-// ── SUPABASE CONFIG ───────────────────────────────────────────────────────────
-const SUPABASE_URL = 'https://gslybwjzsfprkjgximqe.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzbHlid2p6c2ZwcmtqZ3hpbXFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNTI4MDYsImV4cCI6MjA5MjkyODgwNn0.nFwMWPWQPQGBGv4OPa358UOUeU2pGzAS6U7xMBh8y9w';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// ── DB (IndexedDB) ───────────────────────────────────────────────────────────
+let db;
+const DB_NAME = 'folio', DB_VER = 1;
 
-// ── DB (Supabase, no auth) ────────────────────────────────────────────────────
-async function dbGetAll(table) {
-  const { data, error } = await sb.from(table).select('*').order('created_at', { ascending: true });
-  if (error) { console.error('dbGetAll error:', error); return []; }
-  return (data || []).map(r => table === 'transactions' ? {
-    id: r.id, ticker: r.ticker, market: r.market, action: r.action,
-    type: r.type, units: parseFloat(r.units), price: parseFloat(r.price),
-    date: r.date, divTax: r.div_tax || 0, notes: r.notes || '',
-    createdAt: new Date(r.created_at).getTime()
-  } : {
-    id: r.id, ticker: r.ticker, market: r.market,
-    amount: parseFloat(r.amount), date: r.date, notes: r.notes || '',
-    createdAt: new Date(r.created_at).getTime()
+function openDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('transactions')) {
+        const s = d.createObjectStore('transactions', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('ticker', 'ticker'); s.createIndex('type', 'type');
+      }
+      if (!d.objectStoreNames.contains('dividends')) {
+        const s = d.createObjectStore('dividends', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('ticker', 'ticker');
+      }
+    };
+    req.onsuccess = e => { db = e.target.result; res(db); };
+    req.onerror   = e => rej(e);
   });
 }
 
-async function dbAdd(table, data) {
-  const row = table === 'transactions' ? {
-    ticker: data.ticker, market: data.market, action: data.action,
-    type: data.type, units: data.units, price: data.price,
-    date: data.date, div_tax: data.divTax || 0, notes: data.notes || ''
-  } : {
-    ticker: data.ticker, market: data.market,
-    amount: data.amount, date: data.date, notes: data.notes || ''
-  };
-  const { data: inserted, error } = await sb.from(table).insert(row).select().single();
-  if (error) { console.error('dbAdd error:', error); return null; }
-  return inserted.id;
+function dbAdd(store, data) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).add(data);
+    req.onsuccess = () => res(req.result);
+    req.onerror   = () => rej(req.error);
+  });
 }
 
-async function dbDelete(table, id) {
-  const { error } = await sb.from(table).delete().eq('id', id);
-  if (error) console.error('dbDelete error:', error);
+function dbGetAll(store) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = () => res(req.result);
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+function dbDelete(store, id) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).delete(id);
+    req.onsuccess = () => res();
+    req.onerror   = () => rej(req.error);
+  });
 }
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
@@ -762,7 +771,7 @@ async function renderTxnLog() {
       <div class="log-right">
         <div class="log-amount ${t.action === 'buy' ? 'neg' : 'pos'}">${t.action === 'buy' ? '-' : '+'}${fmt(t.units * t.price, t.market)}</div>
         <div class="tag" style="background:rgba(99,102,241,0.12);color:#a5b4fc;">${t.type}</div>
-        <button class="btn btn-danger" onclick="deleteTxn('${t.id}')">Delete</button>
+        <button class="btn btn-danger" onclick="deleteTxn(${t.id})">Delete</button>
       </div>
     </div>`).join('');
 }
@@ -811,7 +820,7 @@ async function renderDivLog() {
       </div>
       <div class="log-right">
         <div class="log-amount pos">+${fmt(d.amount, d.market)}</div>
-        <button class="btn btn-danger" onclick="deleteDiv('${d.id}')">Delete</button>
+        <button class="btn btn-danger" onclick="deleteDiv(${d.id})">Delete</button>
       </div>
     </div>`).join('');
 }
@@ -1865,7 +1874,7 @@ function cancelDivImport() {
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
-(async () => {
+openDB().then(async () => {
   document.getElementById('txn-date').value = today();
   document.getElementById('div-date').value = today().slice(0, 7);
   await renderDashboard();
@@ -1884,7 +1893,7 @@ function cancelDivImport() {
       showToast(`${ticker}: auto-set to ${prev.type} / ${prev.market}${prev.divTax ? `, ${prev.divTax}% tax` : ''}`);
     }
   });
-})();
+});
 </script>
 </body>
 </html>
