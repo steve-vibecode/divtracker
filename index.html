@@ -700,7 +700,7 @@ function badgeColor(ticker) {
 
 function tickerBadge(ticker, market) {
   const [bg, fg] = badgeColor(ticker);
-  const label = market === 'MY' ? ticker + '.KL' : ticker;
+  const label = market === 'MY' ? ticker + '.KL' : market === 'SG' ? ticker + '.SI' : ticker;
   const fs = label.length <= 3 ? '8px' : label.length <= 4 ? '7px' : label.length <= 6 ? '6px' : '5px';
   return `<div class="ticker-badge" style="background:${bg};color:${fg};font-size:${fs};text-align:center;display:flex;align-items:center;justify-content:center;line-height:1.1;">${label}</div>`;
 }
@@ -918,7 +918,7 @@ async function renderDashboard() {
         <div class="ticker-wrap">
           ${tickerBadge(h.ticker, h.market)}
           <div>
-            <div class="s-name">${h.market === 'MY' ? h.ticker + '.KL' : h.ticker}</div>
+            <div class="s-name">${h.market === 'MY' ? h.ticker + '.KL' : h.market === 'SG' ? h.ticker + '.SI' : h.ticker}</div>
             <div class="s-units">${h.market === 'MY' || h.market === 'SG' ? h.units.toLocaleString('en',{maximumFractionDigits:0}) : h.market === 'CRYPTO' ? h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:8}) : h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})} shares</div>
           </div>
         </div>
@@ -947,7 +947,7 @@ async function renderDashboard() {
         <div class="ticker-wrap">
           ${tickerBadge(h.ticker, h.market)}
           <div>
-            <div class="s-name">${h.market === 'MY' ? h.ticker + '.KL' : h.ticker}</div>
+            <div class="s-name">${h.market === 'MY' ? h.ticker + '.KL' : h.market === 'SG' ? h.ticker + '.SI' : h.ticker}</div>
             <div class="s-units">${h.market === 'MY' || h.market === 'SG' ? h.units.toLocaleString('en',{maximumFractionDigits:0}) : h.market === 'CRYPTO' ? h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:8}) : h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})} shares</div>
           </div>
         </div>
@@ -1597,7 +1597,7 @@ async function renderDashboardHistorical(year) {
         <div class="ticker-wrap">
           ${tickerBadge(h.ticker, h.market)}
           <div>
-            <div class="s-name">${h.market === 'MY' ? h.ticker + '.KL' : h.ticker}</div>
+            <div class="s-name">${h.market === 'MY' ? h.ticker + '.KL' : h.market === 'SG' ? h.ticker + '.SI' : h.ticker}</div>
             <div class="s-units">${h.market === 'MY' || h.market === 'SG' ? h.units.toLocaleString('en',{maximumFractionDigits:0}) : h.market === 'CRYPTO' ? h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:8}) : h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})} shares</div>
           </div>
         </div>
@@ -1626,7 +1626,7 @@ async function renderDashboardHistorical(year) {
         <div class="ticker-wrap">
           ${tickerBadge(h.ticker, h.market)}
           <div>
-            <div class="s-name">${h.market === 'MY' ? h.ticker + '.KL' : h.ticker}</div>
+            <div class="s-name">${h.market === 'MY' ? h.ticker + '.KL' : h.market === 'SG' ? h.ticker + '.SI' : h.ticker}</div>
             <div class="s-units">${h.market === 'MY' || h.market === 'SG' ? h.units.toLocaleString('en',{maximumFractionDigits:0}) : h.market === 'CRYPTO' ? h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:8}) : h.units.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})} shares</div>
           </div>
         </div>
