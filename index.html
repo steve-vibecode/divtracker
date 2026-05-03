@@ -988,6 +988,7 @@ async function renderDashboard() {
   const myVal     = active.filter(h=>h.market==='MY').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal??h.costBasis); },0);
   const usVal     = active.filter(h=>h.market==='US'||h.market==='CRYPTO').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal??h.costBasis); },0);
   const sgVal     = active.filter(h=>h.market==='SG').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal??h.costBasis); },0);
+  const ukVal     = active.filter(h=>h.market==='UK').reduce((s,h)=>{ const {curVal}=calcStock(h); return s+(curVal??h.costBasis); },0);
 
   // P/L = unrealised + realised + dividends received (all converted to RM)
   const totalPLRM = active.reduce((s,h)=>{
@@ -997,7 +998,7 @@ async function renderDashboard() {
     return s + capGainRM + dvRM;
   }, 0);
 
-  const totalValRM = myVal + (usVal * rate) + (sgVal * sgdRate);
+  const totalValRM = myVal + (usVal * rate) + (sgVal * sgdRate) + (ukVal * gbpRate);
   const totalCost  = active.reduce((s,h) => s + toRM(h.costBasis, h.market), 0);
   const totalPLPct = totalCost ? (totalPLRM / totalCost * 100) : 0;
 
@@ -1384,7 +1385,6 @@ async function renderDVSummary() {
     const dvYieldStr = r.netYield !== null ? (r.netYield * 100).toFixed(2) + '%' : '#N/A';
     const estAnnStr  = r.estAnnDV !== null ? 'RM' + toRM(r.estAnnDV, r.market).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}) : '#N/A';
     const dvRecvRM   = toRM(r.dvRecvThisYear, r.market);
-    const name =
     const name =
       r.market === 'MY' ? r.ticker + '.KL' :
       r.market === 'SG' ? r.ticker + '.SI' :
