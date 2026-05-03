@@ -340,7 +340,7 @@ nav {
         <div style="font-family:monospace;font-size:11px;color:var(--text);">date | ticker | market | action | type | units | price | div_tax</div>
         <div style="margin-top:8px;font-size:11px;">
           • <b>date</b>: YYYY-MM-DD<br>
-          • <b>market</b>: US or MY<br>
+          • <b>market</b>: US/MY/SG/Crypto/London<br>
           • <b>action</b>: buy or sell<br>
           • <b>type</b>: growth or dividend<br>
           • <b>div_tax</b>: 0–100 (optional, for dividend stocks only)
@@ -427,7 +427,7 @@ nav {
         <div style="font-family:monospace;font-size:11px;color:var(--text);">ticker | market | amount | month</div>
         <div style="margin-top:8px;font-size:11px;">
           • <b>ticker</b>: e.g. JEPQ, 1155<br>
-          • <b>market</b>: US or MY<br>
+          • <b>market</b>: US/MY/SG/Crypto/London<br>
           • <b>amount</b>: e.g. 150.00<br>
           • <b>month</b>: YYYY-MM (e.g. 2025-03)<br>
           &nbsp;&nbsp;Also accepts: Mar-2025 · March 2025 · 03/2025 · 2025/03
@@ -1076,7 +1076,7 @@ async function renderDashboard() {
           <div class="acc-val">${fmt(grwCurVal,cur)}</div>
         </div>
         <div class="acc-pl" style="margin-top:4px;">
-          <span class="${cc(grwPL)}">${grwPL>=0?'+':'-'}${cur==='MY'?'RM':'$'}${Math.abs(grwPL).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+          <span class="${cc(grwPL)}">${grwPL>=0?'+':'-'}${cur==='MY'?'RM':cur==='SG'?'S$':cur==='UK'?'£':cur==='CRYPTO'?'$':'$'}${Math.abs(grwPL).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
           <span class="${cc(grwPLPct)}">${grwPLPct>=0?'+':''}${grwPLPct.toFixed(2)}%</span>
         </div>
       </div>
@@ -1205,7 +1205,7 @@ function renderImportPreview() {
         <span style="color:${r.valid ? 'var(--green)' : 'var(--red)'};">${r.valid ? '✓ Valid' : '✗ Error'}</span>
       </div>
       ${r.valid
-        ? `<div style="color:var(--text2);margin-top:2px;">${r.data.date} · ${r.data.action} ${r.data.units} @ ${r.data.market==='MY'?'RM':'$'}${r.data.price} · ${r.data.type}${r.data.divTax ? ` · ${r.data.divTax}% tax` : ''}</div>`
+        ? `<div style="color:var(--text2);margin-top:2px;">${r.data.date} · ${r.data.action} ${r.data.units} @ ${r.data.market==='MY'?'RM':r.data.market==='SG'?'S$':r.data.market==='UK'?'£':'$'}${r.data.price} · ${r.data.type}${r.data.divTax ? ` · ${r.data.divTax}% tax` : ''}</div>`
         : `<div style="color:var(--red);margin-top:2px;">${r.errors.join(', ')}</div>`
       }
     </div>`).join('');
@@ -1384,7 +1384,12 @@ async function renderDVSummary() {
     const dvYieldStr = r.netYield !== null ? (r.netYield * 100).toFixed(2) + '%' : '#N/A';
     const estAnnStr  = r.estAnnDV !== null ? 'RM' + toRM(r.estAnnDV, r.market).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}) : '#N/A';
     const dvRecvRM   = toRM(r.dvRecvThisYear, r.market);
-    const name = r.market === 'MY' ? r.ticker + '.KL' : r.ticker;
+    const name =
+    const name =
+      r.market === 'MY' ? r.ticker + '.KL' :
+      r.market === 'SG' ? r.ticker + '.SI' :
+      r.market === 'UK' ? r.ticker + '.L' :
+      r.ticker;
     const [bg, fg] = badgeColor(r.ticker);
     return `
     <div style="display:grid;grid-template-columns:1.4fr 1.2fr 0.8fr 1fr;column-gap:6px;padding:10px 14px;border-top:1px solid var(--border);background:var(--card);align-items:center;">
@@ -1559,13 +1564,19 @@ async function renderDashboardHistorical(year) {
 
   // Also fetch historical USD/MYR rate for Dec 31 of that year
   let histRate = cachedRate || 0;
+  let histSgdRate = cachedSgdRate || 0;
+  let histGbpRate = cachedGbpRate || 0;
   try {
-    const rateResp = await fetch(`${WORKER_URL}/history?symbols=MYR%3DX&year=${year}`);
+    const rateResp = await fetch(`${WORKER_URL}/history?symbols=MYR%3DX,SGDMYR%3DX,GBPMYR%3DX&year=${year}`);
     const rateData = await rateResp.json();
-    if (rateData['MYR=X']?.price) histRate = rateData['MYR=X'].price;
+    if (rateData['MYR=X']?.price)    histRate    = rateData['MYR=X'].price;
+    if (rateData['SGDMYR=X']?.price) histSgdRate = rateData['SGDMYR=X'].price;
+    if (rateData['GBPMYR=X']?.price) histGbpRate = rateData['GBPMYR=X'].price;
   } catch (_) {}
 
   const rate = histRate || cachedRate || 0;
+  const sgdRate = histSgdRate || cachedSgdRate || 0;
+  const gbpRate = histGbpRate || cachedGbpRate || 0;
   const toRM = (val, market) => (market === 'US' || market === 'CRYPTO') ? (val ?? 0) * rate : market === 'SG' ? (val ?? 0) * (cachedSgdRate||0) : market === 'UK' ? (val ?? 0) * (cachedGbpRate||0) : (val ?? 0);
 
   const divStocks = active.filter(h => h.type === 'dividend');
@@ -1727,7 +1738,16 @@ async function renderDashboardHistorical(year) {
           <div class="acc-val">${fmt(grwCurVal,cur)}</div>
         </div>
         <div class="acc-pl" style="margin-top:4px;">
-          <span class="${cc(grwPL)}">${grwPL>=0?'+':'-'}${cur==='MY'?'RM':'$'}${Math.abs(grwPL).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+          <span class="${cc(grwPL)}">
+            ${grwPL >= 0 ? '+' : '-'}
+            ${
+              cur === 'MY' ? 'RM' :
+              cur === 'SG' ? 'S$' :
+              cur === 'UK' ? '£' :
+              '$'
+            }
+            ${Math.abs(grwPL).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
           <span class="${cc(grwPLPct)}">${grwPLPct>=0?'+':''}${grwPLPct.toFixed(2)}%</span>
         </div>
       </div>
@@ -1858,9 +1878,18 @@ function renderDivImportPreview() {
         <span style="color:${r.valid?'var(--green)':'var(--red)'};">${r.valid?'✓ Valid':'✗ Error'}</span>
       </div>
       ${r.valid
-        ? `<div style="color:var(--text2);margin-top:2px;">${r.data.date} · ${r.data.market==='MY'?'RM':'$'}${r.data.amount} · ${r.data.market}</div>`
-        : `<div style="color:var(--red);margin-top:2px;">${r.errors.join(', ')}</div>`}
-    </div>`).join('');
+        ? `<div style="color:var(--text2);margin-top:2px;">
+            ${r.data.date} · ${
+              r.data.market === 'MY' ? 'RM' :
+              r.data.market === 'SG' ? 'S$' :
+              r.data.market === 'UK' ? '£' :
+              '$'
+            }${r.data.amount} · ${r.data.market}
+          </div>`
+        : `<div style="color:var(--red);margin-top:2px;">${r.errors.join(', ')}</div>`
+      }
+    </div>
+  `).join('');
   if (errCount > 0) list.innerHTML += `<div style="font-size:11px;color:var(--text2);margin-top:4px;">⚠️ ${errCount} row(s) with errors will be skipped.</div>`;
 }
 
