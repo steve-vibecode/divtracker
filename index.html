@@ -1307,7 +1307,9 @@ async function renderDVSummary() {
 
   const prices = await fetchLivePrices(active);
   const hasPrices = Object.keys(prices).length > 0 && !prices.error;
-  const rate = cachedRate || 0;
+  const rate    = cachedRate    || 0;
+  const sgdRate = cachedSgdRate || 0;
+  const gbpRate = cachedGbpRate || 0;
   const toRM = (val, market) => (market === 'US' || market === 'CRYPTO') ? (val ?? 0) * rate : market === 'SG' ? (val ?? 0) * sgdRate : market === 'UK' ? (val ?? 0) * gbpRate : (val ?? 0);
 
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
