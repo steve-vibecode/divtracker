@@ -869,8 +869,13 @@ function onTxnMarketChange() {
     if (!tickerInput.value) tickerInput.value = 'EPF';
   } else {
     epfBanner.style.display = 'none';
-    document.getElementById('txn-type').disabled = false;
-    document.getElementById('txn-price').readOnly = false;
+    const typeEl = document.getElementById('txn-type');
+    const priceEl = document.getElementById('txn-price');
+    // Clear leftovers from EPF/ASNB locks so a locked 1.00 / Dividend isn't saved by mistake
+    if (typeEl.disabled) typeEl.value = 'growth';
+    if (priceEl.readOnly) priceEl.value = '';
+    typeEl.disabled = false;
+    priceEl.readOnly = false;
     toggleDivTax();
   }
 }
