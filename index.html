@@ -626,7 +626,8 @@ function makeToRM(r) {
 }
 
 function ratesBadge(r) {
-  return `USD→MYR: ${r.usd ? r.usd.toFixed(2) : '—'} · SGD→MYR: ${r.sgd ? r.sgd.toFixed(2) : '—'}<br>GBP→MYR: ${r.gbp ? r.gbp.toFixed(2) : '—'} · HKD→MYR: ${r.hkd ? r.hkd.toFixed(3) : '—'}<br>EUR→MYR: ${r.eur ? r.eur.toFixed(2) : '—'}`;
+  const f = (v, d = 2) => v ? v.toFixed(d) : '—';
+  return `USD: ${f(r.usd)} · SGD: ${f(r.sgd)} · GBP: ${f(r.gbp)}<br>HKD: ${f(r.hkd, 3)} · EUR: ${f(r.eur)}`;
 }
 
 function injectASNB(holdings) {
