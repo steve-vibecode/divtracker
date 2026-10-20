@@ -294,7 +294,7 @@ nav {
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Action</label>
-          <select class="form-select" id="txn-action">
+          <select class="form-select" id="txn-action" onchange="updateFeeField()">
             <option value="buy">Buy</option>
             <option value="sell">Sell</option>
           </select>
@@ -316,6 +316,12 @@ nav {
           <label class="form-label">Price per unit</label>
           <input class="form-input" id="txn-price" type="number" placeholder="0.00" min="0" step="any"/>
         </div>
+      </div>
+      <!-- FEES (in the stock's own currency) -->
+      <div class="form-group" id="txn-fees-group">
+        <label class="form-label" id="txn-fees-label">Buying fees (USD)</label>
+        <input class="form-input" id="txn-fees" type="number" placeholder="0.00" min="0" step="any"/>
+        <div style="font-size:11px;color:var(--text2);margin-top:5px;">💡 Total platform fees (brokerage, clearing, stamp duty…) in the stock's currency</div>
       </div>
       <div class="form-group" id="txn-tax-group" style="display:none;">
         <label class="form-label">Dividend Withholding Tax (%)</label>
@@ -355,13 +361,14 @@ nav {
       <!-- Format guide -->
       <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8;">
         <div style="font-weight:700;color:var(--accent);margin-bottom:6px;">Required column order:</div>
-        <div style="font-family:monospace;font-size:11px;color:var(--text);">date | ticker | market | action | type | units | price | div_tax</div>
+        <div style="font-family:monospace;font-size:11px;color:var(--text);">date | ticker | market | action | type | units | price | div_tax | fees</div>
         <div style="margin-top:8px;font-size:11px;">
           • <b>date</b>: YYYY-MM-DD<br>
           • <b>market</b>: US/MY/SG/Crypto/UK/HK/EU/EPF<br>
           • <b>action</b>: buy or sell<br>
           • <b>type</b>: growth or dividend<br>
-          • <b>div_tax</b>: 0–100 (optional, for dividend stocks only)
+          • <b>div_tax</b>: 0–100 (optional, for dividend stocks only)<br>
+          • <b>fees</b>: total buy/sell fees in the stock's currency (optional)
         </div>
       </div>
 
@@ -570,6 +577,28 @@ function curSym(m) {
     : m === 'HK' ? 'HK$'
     : m === 'EU' ? '€'
     : '$';
+}
+
+// Currency code per market (for labels)
+function curCode(m) {
+  return (m === 'MY' || m === 'EPF') ? 'MYR'
+    : m === 'SG' ? 'SGD'
+    : m === 'UK' ? 'GBP'
+    : m === 'HK' ? 'HKD'
+    : m === 'EU' ? 'EUR'
+    : 'USD';
+}
+
+// Update fee label to "Buying/Selling fees (CUR)"; hide for EPF/ASNB (no fees)
+function updateFeeField() {
+  const market = document.getElementById('txn-market').value;
+  const action = document.getElementById('txn-action').value;
+  const ticker = document.getElementById('txn-ticker').value.trim().toUpperCase();
+  const noFees = market === 'EPF' || isASNB(ticker);
+  document.getElementById('txn-fees-group').style.display = noFees ? 'none' : 'block';
+  if (noFees) document.getElementById('txn-fees').value = '';
+  document.getElementById('txn-fees-label').textContent =
+    `${action === 'buy' ? 'Buying' : 'Selling'} fees (${curCode(market)})`;
 }
 
 // Price + rate cache (5 min TTL)
@@ -879,6 +908,7 @@ function onTxnMarketChange() {
     priceEl.readOnly = false;
     toggleDivTax();
   }
+  updateFeeField();
 }
 
 // ── TRANSACTIONS ──────────────────────────────────────────────────────────────
@@ -903,6 +933,10 @@ async function addTransaction() {
   const date   = document.getElementById('txn-date').value || today();
   const notes  = document.getElementById('txn-notes').value.trim();
   const divTax = type === 'dividend' ? (parseFloat(document.getElementById('txn-tax').value) || 0) : 0;
+  // Fees in the stock's own currency (EPF / ASNB have no fees)
+  const fees   = (market === 'EPF' || isASNB(ticker)) ? 0 : (parseFloat(document.getElementById('txn-fees').value) || 0);
+
+  if (fees < 0) { showToast('Fees cannot be negative', true); return; }
 
   // ASNB validation: must be MY + dividend, price locked to 1.00
   if (isASNB(ticker)) {
@@ -929,13 +963,14 @@ async function addTransaction() {
     }
   }
 
-  await dbAdd('transactions', { ticker, market, action, type, units, price, date, notes, divTax, createdAt: Date.now() });
+  await dbAdd('transactions', { ticker, market, action, type, units, price, fees, date, notes, divTax, createdAt: Date.now() });
   showToast(`${action === 'buy' ? 'Bought' : 'Sold'} ${ticker} logged!`);
 
   // reset form
   document.getElementById('txn-ticker').value = '';
   document.getElementById('txn-units').value  = '';
   document.getElementById('txn-price').value  = '';
+  document.getElementById('txn-fees').value   = '';
   document.getElementById('txn-notes').value  = '';
   document.getElementById('txn-tax').value    = '';
   document.getElementById('txn-date').value   = today();
@@ -946,6 +981,7 @@ async function addTransaction() {
   document.getElementById('epf-info-banner').style.display = 'none';
   document.getElementById('eu-info-banner').style.display = 'none';
   toggleDivTax();
+  updateFeeField();
 }
 
 async function renderTxnLog() {
@@ -956,19 +992,25 @@ async function renderTxnLog() {
     return;
   }
   all.sort((a, b) => b.createdAt - a.createdAt);
-  el.innerHTML = all.map(t => `
+  el.innerHTML = all.map(t => {
+    const fees  = t.fees || 0;
+    const gross = t.units * t.price;
+    const net   = t.action === 'buy' ? gross + fees : gross - fees; // cash actually out / in
+    return `
     <div class="log-item">
       <div class="log-left">
         <div class="log-ticker">${t.ticker} <span class="tag tag-${t.action}">${t.action}</span> <span class="tag tag-${t.market.toLowerCase()}">${t.market}</span></div>
         <div class="log-detail">${t.date} · ${t.units} units @ ${fmt(t.price, t.market)}</div>
+        ${fees ? `<div class="log-detail">Fees: ${fmt(fees, t.market)}</div>` : ''}
         ${t.notes ? `<div class="log-detail" style="color:var(--text3);">${t.notes}</div>` : ''}
       </div>
       <div class="log-right">
-        <div class="log-amount ${t.action === 'buy' ? 'neg' : 'pos'}">${t.action === 'buy' ? '-' : '+'}${fmt(t.units * t.price, t.market)}</div>
+        <div class="log-amount ${t.action === 'buy' ? 'neg' : 'pos'}">${t.action === 'buy' ? '-' : '+'}${fmt(net, t.market)}</div>
         <div class="tag" style="background:rgba(99,102,241,0.12);color:#a5b4fc;">${t.type}</div>
         <button class="btn btn-danger" onclick="deleteTxn(${t.id})">Delete</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 async function deleteTxn(id) {
@@ -1036,9 +1078,9 @@ async function renderDashboard() {
     return;
   }
 
-  // Build holdings + track realised gains
+  // Build holdings + track realised gains (net of fees)
   const holdings = {};
-  const realisedGain = {}; // realised gain per ticker from sells
+  const realisedGain = {}; // realised gain per ticker from sells, minus all buy/sell fees
 
   for (const t of txns) {
     if (!holdings[t.ticker]) holdings[t.ticker] = { ticker: t.ticker, market: t.market, type: t.type, units: 0, costBasis: 0 };
@@ -1053,6 +1095,8 @@ async function renderDashboard() {
       h.costBasis  -= avg * t.units;
       h.units      -= t.units;
     }
+    // Buy + sell fees reduce P/L — folded into realised so every P/L total picks them up
+    if (t.fees) realisedGain[t.ticker] = (realisedGain[t.ticker] || 0) - t.fees;
   }
 
   const divMap = {};
@@ -1128,7 +1172,7 @@ async function renderDashboard() {
     const avgCost    = h.units ? h.costBasis / h.units : 0;
     const curVal     = livePrice ? livePrice * h.units : null;
     const unrealised = curVal !== null ? curVal - h.costBasis : null;
-    const realised   = realisedGain[h.ticker] || 0;
+    const realised   = realisedGain[h.ticker] || 0; // already net of fees
     const pl         = unrealised !== null ? unrealised + realised : null;
     const plPct      = pl !== null && h.costBasis ? (pl / h.costBasis * 100) : null;
     // Est annual DV = divRate per share × units held, after withholding tax
@@ -1206,7 +1250,7 @@ async function renderDashboard() {
 
   if (!rates.usd) console.warn('Exchange rate missing — USD values will show as 0');
 
-  // P/L = unrealised + realised + dividends received (all converted to RM)
+  // P/L = unrealised + realised (net of fees) + dividends received (all converted to RM)
   const totalPLRM = active.reduce((s,h)=>{
     const {unrealised, realised} = calcStock(h);
     const capGainRM = toRM((unrealised??0) + realised, h.market);
@@ -1309,7 +1353,7 @@ async function renderDashboard() {
 let importRows = [];
 
 function downloadTemplate() {
-  const csv = `date,ticker,market,action,type,units,price,div_tax\n2024-01-15,AAPL,US,buy,growth,10,180.00,\n2024-01-15,JEPQ,US,buy,dividend,100,45.00,30\n2024-02-01,1155,MY,buy,dividend,200,9.50,0\n2024-03-01,EPF,EPF,buy,dividend,5000,1.00,0\n2024-04-01,ASNB,MY,buy,dividend,10000,1.00,0\n2024-05-01,RMS,EU,buy,growth,2,2200.00,\n`;
+  const csv = `date,ticker,market,action,type,units,price,div_tax,fees\n2024-01-15,AAPL,US,buy,growth,10,180.00,,1.00\n2024-01-15,JEPQ,US,buy,dividend,100,45.00,30,1.00\n2024-02-01,1155,MY,buy,dividend,200,9.50,0,8.50\n2024-03-01,EPF,EPF,buy,dividend,5000,1.00,0,0\n2024-04-01,ASNB,MY,buy,dividend,10000,1.00,0,0\n2024-05-01,RMS,EU,buy,growth,2,2200.00,,5.00\n`;
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = 'folio-template.csv'; a.click();
@@ -1326,7 +1370,7 @@ function excelDateToISO(val) {
 }
 
 function parseImportRow(row) {
-  const [rawDate, rawTicker, market, action, type, units, price, divTax] = row;
+  const [rawDate, rawTicker, market, action, type, units, price, divTax, fees] = row;
   const errors = [];
   const date   = excelDateToISO(rawDate);
   const ticker = String(rawTicker ?? '').trim().toUpperCase();
@@ -1349,6 +1393,11 @@ function parseImportRow(row) {
   const p = (mkt === 'EPF' || ticker === 'ASNB') ? 1.00 : parseFloat(price);
   if (isNaN(p) || p <= 0) errors.push('invalid price');
   const tax = parseFloat(divTax) || 0;
+
+  // Fees (optional 9th column, stock's currency) — EPF / ASNB have no fees
+  const f = (mkt === 'EPF' || ticker === 'ASNB') ? 0 : (parseFloat(fees) || 0);
+  if (f < 0) errors.push('invalid fees');
+
   return {
     valid: errors.length === 0,
     errors,
@@ -1360,6 +1409,7 @@ function parseImportRow(row) {
       type: typ,
       units: u,
       price: p,
+      fees: f,
       divTax: tax,
       createdAt: new Date(date).getTime() || Date.now(),
     }
@@ -1421,7 +1471,7 @@ function renderImportPreview() {
         <span style="color:${r.valid ? 'var(--green)' : 'var(--red)'};">${r.valid ? '✓ Valid' : '✗ Error'}</span>
       </div>
       ${r.valid
-        ? `<div style="color:var(--text2);margin-top:2px;">${r.data.date} · ${r.data.action} ${r.data.units} @ ${curSym(r.data.market)}${r.data.price} · ${r.data.type}${r.data.market==='EPF'?' · 6% EPF':''}${r.data.divTax ? ` · ${r.data.divTax}% tax` : ''}</div>`
+        ? `<div style="color:var(--text2);margin-top:2px;">${r.data.date} · ${r.data.action} ${r.data.units} @ ${curSym(r.data.market)}${r.data.price} · ${r.data.type}${r.data.market==='EPF'?' · 6% EPF':''}${r.data.divTax ? ` · ${r.data.divTax}% tax` : ''}${r.data.fees ? ` · fee ${curSym(r.data.market)}${r.data.fees}` : ''}</div>`
         : `<div style="color:var(--red);margin-top:2px;">${r.errors.join(', ')}</div>`
       }
     </div>`).join('');
@@ -1505,6 +1555,8 @@ async function renderDVSummary() {
       realisedGain[t.ticker] = (realisedGain[t.ticker] || 0) + (t.price - avg) * t.units;
       h.costBasis -= avg * t.units; h.units -= t.units;
     }
+    // Buy + sell fees reduce P/L
+    if (t.fees) realisedGain[t.ticker] = (realisedGain[t.ticker] || 0) - t.fees;
   }
 
   const divTaxMap = {};
@@ -1571,7 +1623,7 @@ async function renderDVSummary() {
     const dvRecvThisYear = divMapThisYear[h.ticker] || 0;
     const costBasis = h.costBasis;
     const unrealised = curVal !== null ? curVal - costBasis : null;
-    const realised  = realisedGain[h.ticker] || 0;
+    const realised  = realisedGain[h.ticker] || 0; // net of fees
     const plInclDV  = (unrealised ?? 0) + realised + dvRecv;
     return { ...h, livePrice, curVal, netYield, estAnnDV, dvRecv, dvRecvThisYear, plInclDV, costBasis };
   });
@@ -1752,6 +1804,8 @@ async function renderDashboardHistorical(year) {
       realisedGain[t.ticker] = (realisedGain[t.ticker] || 0) + (t.price - avg) * t.units;
       h.costBasis -= avg * t.units; h.units -= t.units;
     }
+    // Buy + sell fees reduce P/L
+    if (t.fees) realisedGain[t.ticker] = (realisedGain[t.ticker] || 0) - t.fees;
   }
 
   const divMap = {};
@@ -1842,7 +1896,7 @@ async function renderDashboardHistorical(year) {
     const avgCost    = h.units ? h.costBasis / h.units : 0;
     const curVal     = livePrice ? livePrice * h.units : null;
     const unrealised = curVal !== null ? curVal - h.costBasis : null;
-    const realised   = realisedGain[h.ticker] || 0;
+    const realised   = realisedGain[h.ticker] || 0; // net of fees
     const pl         = unrealised !== null ? unrealised + realised : null;
     const plPct      = pl !== null && h.costBasis ? (pl / h.costBasis * 100) : null;
     const taxRate    = (divTaxMap[h.ticker] || 0) / 100;
@@ -2132,10 +2186,11 @@ function cancelDivImport() {
 openDB().then(async () => {
   document.getElementById('txn-date').value = today();
   document.getElementById('div-date').value = today().slice(0, 7);
+  updateFeeField();
   await renderDashboard();
   document.getElementById('txn-ticker').addEventListener('blur', async function() {
     const ticker = this.value.trim().toUpperCase();
-    if (!ticker) return;
+    if (!ticker) { updateFeeField(); return; }
     const existing = await dbGetAll('transactions');
     const prev = existing.find(t => t.ticker === ticker);
     if (prev) {
@@ -2167,6 +2222,8 @@ openDB().then(async () => {
       document.getElementById('epf-info-banner').style.display = 'none';
       showToast('ASNB: auto-set to dividend / MY · Fixed NAV RM1.00, 4.75% yield');
     }
+    // Refresh fee label currency / visibility for the detected market
+    updateFeeField();
   });
 });
 </script>
